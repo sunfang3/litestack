@@ -69,4 +69,43 @@ class TestLitevectorExtension < Minitest::Test
       assert_includes [true, false], Litevector.available?
     end
   end
+
+  def test_platform_key_and_vendor_dirs
+    key = Litevector::Extension.platform_key
+    assert_match(/linux|darwin|windows|unknown/, key)
+    dirs = Litevector::Extension.vendor_dirs
+    assert dirs.any? { |d| d.include?("vectorlite") }
+  end
+
+  def test_load_failure_wraps_as_extension_load_error
+    path = File.join(Dir.mktmpdir, "vectorlite.so")
+    File.write(path, "not a real shared library")
+    Litevector.extension_path = path
+    db = SQLite3::Database.new(":memory:")
+    err = assert_raises(Litevector::ExtensionLoadError) do
+      Litevector::Extension.load!(db)
+    end
+    assert_match(/failed to load vectorlite/, err.message)
+  ensure
+    FileUtils.rm_rf(File.dirname(path)) if path
+  end
+
+  def test_info_and_loaded_predicate
+    VectorliteHelper.skip_unless_available!(self)
+    Litevector.extension_path = VectorliteHelper.extension_path
+    db = SQLite3::Database.new(":memory:")
+    refute Litevector::Extension.loaded?(db)
+    info = Litevector::Extension.info(db)
+    assert_match(/vectorlite/i, info.to_s)
+    assert Litevector::Extension.loaded?(db)
+  end
+
+  def test_configure_and_reset
+    Litevector.configure { |c| c.extension_path = "/tmp/x.so"; c.auto_save = false }
+    assert_equal "/tmp/x.so", Litevector.extension_path
+    refute Litevector.auto_save
+    Litevector.reset_configuration!
+    assert_nil Litevector.extension_path
+    assert Litevector.auto_save
+  end
 end

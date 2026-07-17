@@ -18,6 +18,38 @@ class TestRailtie < Minitest::Test
     assert Litestack::Railtie.config.litestack.respond_to?(:data_path)
   end
 
+  def test_railtie_exposes_extension_path_configs
+    cfg = Litestack::Railtie.config.litestack
+    assert cfg.respond_to?(:vector_extension_path)
+    assert cfg.respond_to?(:simple_extension_path)
+  end
+
+  def test_disable_sqlite_warning_nested_sqlite_config
+    nested = Object.new
+    def nested.respond_to?(meth, include_all = false)
+      return true if meth == :production_warning=
+      super
+    end
+    def nested.production_warning=(value)
+      @v = value
+    end
+    def nested.production_warning
+      @v
+    end
+
+    ar_config = Object.new
+    def ar_config.respond_to?(meth, include_all = false)
+      return false if meth == :sqlite3_production_warning=
+      return true if meth == :sqlite3
+      super
+    end
+    ar_config.define_singleton_method(:sqlite3) { nested }
+
+    app = Struct.new(:config).new(Struct.new(:active_record).new(ar_config))
+    Litestack::Railtie.disable_sqlite_production_warning!(app)
+    assert_equal false, nested.production_warning
+  end
+
   # Issues #136 / #128: older railties assigned sqlite3_production_warning= without a guard
   # and blew up on Rails 7.2+/8 when the config API moved or vanished.
   def test_disable_sqlite_warning_is_safe_without_config_method

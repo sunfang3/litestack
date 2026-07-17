@@ -104,4 +104,45 @@ class TestLitesearchSimpleZhPinyin < Minitest::Test
       assert_match(/libsimple/, err.message)
     end
   end
+
+  def test_platform_key_and_dict_path
+    key = Litesearch::SimpleExtension.platform_key
+    assert_match(/linux|darwin|windows|unknown/, key)
+    assert Litesearch.simple_available? if SimpleExtensionHelper.available?
+
+    path = SimpleExtensionHelper.extension_path
+    skip "no libsimple" unless path
+    dict = Litesearch::SimpleExtension.dict_path_for(path)
+    # release layout includes dict/ next to .so
+    if File.directory?(File.join(File.dirname(path), "dict"))
+      assert_equal File.join(File.dirname(path), "dict"), dict
+    end
+    assert_nil Litesearch::SimpleExtension.dict_path_for("/tmp/no-such/libsimple.so")
+  end
+
+  def test_load_failure_wraps_error
+    path = File.join(Dir.mktmpdir, "libsimple.so")
+    File.write(path, "not a real shared library")
+    Litesearch.simple_extension_path = path
+    db = SQLite3::Database.new(":memory:")
+    err = assert_raises(Litesearch::SimpleExtension::LoadError) do
+      Litesearch::SimpleExtension.load!(db)
+    end
+    assert_match(/failed to load libsimple/, err.message)
+  ensure
+    FileUtils.rm_rf(File.dirname(path)) if path
+  end
+
+  def test_ensure_simple_tokenizer_on_litedb
+    SimpleExtensionHelper.skip_unless_available!(self)
+    Litesearch.simple_extension_path = SimpleExtensionHelper.extension_path
+    db = Litedb.new(":memory:")
+    assert_same db, db.ensure_simple_tokenizer!
+    assert Litesearch::SimpleExtension.loaded?(db)
+  end
+
+  def test_query_builder_rejects_unknown
+    schema = Litesearch::Schema.new
+    assert_raises(RuntimeError) { schema.query_builder :nope }
+  end
 end

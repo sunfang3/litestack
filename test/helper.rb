@@ -9,10 +9,10 @@ SimpleCov.start do
   add_filter "/scripts/"
   add_filter "/gemfiles/"
   add_filter "/vendor/"
-  # Measured baseline from first clean full suite on Ruby 4.0.5 + Rails 8.1.3 (Q4).
-  # Line ~86% / branch ~58%; floors apply to full suite only (skip on partial/target runs).
+  # Measured baseline: line ~86% / branch ~58% on full suite (Ruby 4.0.5 + Rails 8.1.3).
+  # Floors apply to full suite only (skip on partial/target runs).
   unless ENV["COVERAGE_PARTIAL"] == "1" || ENV["LITESTACK_PARTIAL_TEST"] == "1"
-    minimum_coverage line: 80, branch: 50
+    minimum_coverage line: 85, branch: 50
   end
   add_group "Core", "lib/litestack"
 end
