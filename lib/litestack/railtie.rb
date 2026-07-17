@@ -20,17 +20,21 @@ module Litestack
 
     initializer :litestack_disable_production_sqlite_warning do |app|
       ActiveSupport.on_load(:active_record) do
-        if app.config.active_record.respond_to?(:sqlite3_production_warning=)
-          app.config.active_record.sqlite3_production_warning = false
-        elsif app.config.active_record.respond_to?(:sqlite3) && app.config.active_record.sqlite3.respond_to?(:production_warning=)
-          # Rails 8.1 nested config path if present
-          begin
-            app.config.active_record.sqlite3.production_warning = false
-          rescue
-            nil
-          end
-        end
+        # Issues #136 / #128: never assume sqlite3_production_warning= exists
+        # (removed / relocated across Rails 7.2 → 8.x).
+        Litestack::Railtie.disable_sqlite_production_warning!(app)
       end
+    end
+
+    # Safe no-op when the host Rails version has no production SQLite warning config.
+    def self.disable_sqlite_production_warning!(app)
+      ar = app.config.active_record
+      if ar.respond_to?(:sqlite3_production_warning=)
+        ar.sqlite3_production_warning = false
+      elsif ar.respond_to?(:sqlite3) && ar.sqlite3.respond_to?(:production_warning=)
+        ar.sqlite3.production_warning = false
+      end
+      nil
     end
   end
 end
