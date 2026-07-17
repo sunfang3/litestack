@@ -30,6 +30,8 @@ jobs:
         with:
           ruby-version: "4.0.0"
           bundler-cache: true
+      - name: Fetch optional SQLite extensions
+        run: bundle exec rake extensions:fetch
       - name: Resolve and test
         run: |
           bundle exec ruby -e 'require "rails"; abort Rails.version unless Rails.version.start_with?("8.1")'
@@ -48,6 +50,8 @@ jobs:
         run: |
           ruby -v
           bundle exec ruby -e 'require "rails"; require "sqlite3"; puts "Rails=#{Rails.version} sqlite3=#{SQLite3::VERSION}"'
+      - name: Fetch optional SQLite extensions
+        run: bundle exec rake extensions:fetch
       - name: Test
         run: bundle exec rake test
       - name: Standard
@@ -68,6 +72,8 @@ jobs:
         with:
           ruby-version: "4.0"
           bundler-cache: true
+      - name: Fetch optional SQLite extensions
+        run: bundle exec rake extensions:fetch
       - name: Test and style
         run: |
           bundle exec rake test
@@ -86,6 +92,8 @@ jobs:
         with:
           ruby-version: "4.0.0"
           bundler-cache: true
+      - name: Fetch optional SQLite extensions
+        run: bundle exec rake extensions:fetch
       - name: Resolve and test
         run: bundle exec rake test
 
@@ -100,6 +108,8 @@ jobs:
         with:
           ruby-version: "4.0"
           bundler-cache: true
+      - name: Fetch optional SQLite extensions
+        run: bundle exec rake extensions:fetch
       - name: Resolve and test
         run: bundle exec rake test
 
@@ -115,5 +125,7 @@ jobs:
         with:
           ruby-version: head
           bundler-cache: true
+      - name: Fetch optional SQLite extensions
+        run: bundle exec rake extensions:fetch || true
       - name: Warning-only suite
         run: bundle exec rake test || true
