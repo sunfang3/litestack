@@ -8,7 +8,12 @@
 #   bundle exec ruby scripts/fetch_simple.rb
 #   SIMPLE_VERSION=v0.7.1 bundle exec ruby scripts/fetch_simple.rb
 #
-# Requires: network, python3 (for zip extract), gh optional (uses HTTPS API).
+# Rails app (install under the app, not the gem):
+#   LITESTACK_EXTENSION_ROOT=$PWD bundle exec ruby \
+#     "$(bundle show litestack)/scripts/fetch_simple.rb"
+#   # → ./vendor/simple/<platform>/libsimple.so
+#
+# Requires: network, python3 (for zip extract).
 
 require "fileutils"
 require "json"
@@ -17,7 +22,10 @@ require "rbconfig"
 require "tmpdir"
 
 VERSION = ENV.fetch("SIMPLE_VERSION", "v0.7.1")
-ROOT = File.expand_path("..", __dir__)
+# Prefer app root when set (Rails), else gem/source tree.
+ROOT = File.expand_path(
+  ENV["LITESTACK_EXTENSION_ROOT"] || ENV["DEST"] || File.expand_path("..", __dir__)
+)
 REPO = "wangfenjin/simple"
 
 def platform_key

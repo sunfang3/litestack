@@ -70,6 +70,14 @@ class TestInstallGenerator < Minitest::Test
     assert_match(%r{/db/\*\*/\*\.sqlite3}, docker)
     assert_match(%r{/db/\*\*/\*\.sqlite3-\*}, docker)
     assert_match(/Ignore default Litestack SQLite databases/, docker)
+
+    ext_init = File.join(@root, "config/initializers/litestack_extensions.rb")
+    assert File.file?(ext_init), "expected litestack_extensions initializer"
+    init_body = File.read(ext_init)
+    assert_match(/simple_extension_path/, init_body)
+    assert_match(/vector_extension_path/, init_body)
+    assert_match(/vendor\/simple/, init_body)
+    assert_match(/vendor\/vectorlite/, git)
   end
 
   def test_idempotent_second_run

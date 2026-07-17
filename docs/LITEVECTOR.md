@@ -6,25 +6,36 @@ Related: [issue #132](https://github.com/oldmoe/litestack/issues/132), plans und
 
 ## Status
 
-MVP on branch `litevector`. Pinned engine: **vectorlite 0.2.0**.
+Pinned engine: **vectorlite 0.2.0**. Optional — core Litestack works without it.
+
+**Rails full-stack install (recommended path):** [RAILS_FULL_STACK.md](RAILS_FULL_STACK.md)
 
 ## Install the native extension
 
-Litevector does **not** ship the `.so` inside the gem. Fetch a platform build:
+Litevector does **not** ship the `.so` inside the gem. Fetch a platform build.
+
+**In a Rails app** (put binaries under the app, not the gem):
+
+```bash
+export LITESTACK_EXTENSION_ROOT="$PWD"
+bundle exec ruby "$(bundle show litestack)/scripts/fetch_vectorlite.rb"
+# → vendor/vectorlite/<platform>/vectorlite.so
+```
+
+**In the litestack repo** (gem development):
 
 ```bash
 bundle exec ruby scripts/fetch_vectorlite.rb
-# writes vendor/vectorlite/<platform>/vectorlite.so
 ```
 
-Or set an explicit path:
+Wire path (Rails initializer or ENV):
 
 ```bash
 export LITEVECTOR_EXTENSION_PATH=/path/to/vectorlite.so
 ```
 
 ```ruby
-# config/application.rb
+# config/initializers/litestack_extensions.rb (created by litestack:install)
 config.litestack.vector_extension_path = Rails.root.join(
   "vendor/vectorlite/linux-x86_64/vectorlite.so"
 )

@@ -33,9 +33,18 @@ module Litesearch
       %w[libsimple.so libsimple.dylib simple.dll libsimple.dll simple]
     end
 
+    def vendor_dirs
+      dirs = [File.join(VENDOR_ROOT, platform_key)]
+      if defined?(Rails) && Rails.respond_to?(:root) && Rails.root
+        root = Rails.root
+        dirs << root.join("vendor/simple", platform_key).to_s
+        dirs << root.join("vendor/litestack/simple", platform_key).to_s
+      end
+      dirs
+    end
+
     def vendored_candidates
-      dir = File.join(VENDOR_ROOT, platform_key)
-      basenames.map { |b| File.join(dir, b) }
+      vendor_dirs.flat_map { |dir| basenames.map { |b| File.join(dir, b) } }
     end
 
     def candidate_paths

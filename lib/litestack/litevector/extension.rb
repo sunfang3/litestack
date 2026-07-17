@@ -28,9 +28,18 @@ module Litevector
       %w[vectorlite.so vectorlite.dylib vectorlite.dll vectorlite]
     end
 
+    def vendor_dirs
+      dirs = [File.join(VENDOR_ROOT, platform_key)]
+      if defined?(Rails) && Rails.respond_to?(:root) && Rails.root
+        root = Rails.root
+        dirs << root.join("vendor/vectorlite", platform_key).to_s
+        dirs << root.join("vendor/litestack/vectorlite", platform_key).to_s
+      end
+      dirs
+    end
+
     def vendored_candidates
-      dir = File.join(VENDOR_ROOT, platform_key)
-      extension_basenames.map { |b| File.join(dir, b) }
+      vendor_dirs.flat_map { |dir| extension_basenames.map { |b| File.join(dir, b) } }
     end
 
     # Ordered list of paths to try (may not exist).

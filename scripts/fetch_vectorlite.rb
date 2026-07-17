@@ -8,7 +8,12 @@
 #   bundle exec ruby scripts/fetch_vectorlite.rb
 #   VECTORLITE_VERSION=0.2.0 bundle exec ruby scripts/fetch_vectorlite.rb
 #
-# Requires network access. Uses only Ruby stdlib (open-uri, rubygems, fileutils, json).
+# Rails app (install under the app, not the gem):
+#   LITESTACK_EXTENSION_ROOT=$PWD bundle exec ruby \
+#     "$(bundle show litestack)/scripts/fetch_vectorlite.rb"
+#   # → ./vendor/vectorlite/<platform>/vectorlite.so
+#
+# Requires network access. Uses only Ruby stdlib (open-uri, fileutils, json).
 
 require "fileutils"
 require "json"
@@ -19,7 +24,9 @@ require "tmpdir"
 require "zlib"
 
 VERSION = ENV.fetch("VECTORLITE_VERSION", "0.2.0")
-ROOT = File.expand_path("..", __dir__)
+ROOT = File.expand_path(
+  ENV["LITESTACK_EXTENSION_ROOT"] || ENV["DEST"] || File.expand_path("..", __dir__)
+)
 
 def platform_key
   os = RbConfig::CONFIG["host_os"]

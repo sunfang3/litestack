@@ -107,9 +107,47 @@ class Litestack::InstallGenerator < Rails::Generators::Base
     )
   end
 
+  def create_extensions_initializer
+    template "litestack_extensions.rb", "config/initializers/litestack_extensions.rb"
+  end
+
+  def modify_gitignore_for_extensions
+    path = File.join(destination_root, ".gitignore")
+    return unless File.exist?(path)
+
+    marker = "# Litestack optional SQLite extensions (fetch at build/deploy)"
+    content = File.read(path)
+    if content.include?(marker) || content.include?("/vendor/simple/**/*.so")
+      say_status :skip, ".gitignore already ignores extension binaries", :yellow
+      return
+    end
+
+    append_file ".gitignore", <<~TEXT
+
+      #{marker}
+      /vendor/simple/**/*.so
+      /vendor/simple/**/*.dylib
+      /vendor/simple/**/*.dll
+      /vendor/vectorlite/**/*.so
+      /vendor/vectorlite/**/*.dylib
+      /vendor/vectorlite/**/*.dll
+    TEXT
+  end
+
   def print_optional_solid_cleanup
     say ""
-    say "Litestack installed. Optional cleanup if you do not need Solid Cache/Queue:", :green
+    say "Litestack core stack installed (Litedb / Litecache / Litejob / Litecable).", :green
+    say ""
+    say "Optional native extensions (NOT installed by this generator):", :yellow
+    say "  Chinese/Pinyin FTS → libsimple   |  Vector kNN → vectorlite"
+    say "  From the Rails root:"
+    say "    export LITESTACK_EXTENSION_ROOT=\"$PWD\""
+    say "    bundle exec ruby \"$(bundle show litestack)/scripts/fetch_simple.rb\""
+    say "    bundle exec ruby \"$(bundle show litestack)/scripts/fetch_vectorlite.rb\""
+    say "  Paths are wired in config/initializers/litestack_extensions.rb when files exist."
+    say "  Full guide: docs/RAILS_FULL_STACK.md (in the litestack gem / repo)."
+    say ""
+    say "Optional cleanup if you do not need Solid Cache/Queue:", :green
     say "  - Remove solid_cache / solid_queue gems from the Gemfile (manual)"
     say "  - Remove their migrations and solid_* config if present (manual)"
     say "  - The generator never auto-deletes Solid gems, migrations, or Gemfile lines."

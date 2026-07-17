@@ -12,18 +12,30 @@ Built-in SQLite FTS5 tokenizers (`porter`, `unicode61`, …) do not segment CJK 
 
 ## Install the extension
 
+**Rails full-stack guide:** [RAILS_FULL_STACK.md](RAILS_FULL_STACK.md)
+
+**In a Rails app** (binaries under the app):
+
 ```bash
-bundle exec ruby scripts/fetch_simple.rb
+export LITESTACK_EXTENSION_ROOT="$PWD"
+bundle exec ruby "$(bundle show litestack)/scripts/fetch_simple.rb"
 # → vendor/simple/<platform>/libsimple.so (+ dict/ for jieba)
 ```
 
-Or set:
+**In the litestack repo** (gem development):
+
+```bash
+bundle exec ruby scripts/fetch_simple.rb
+```
+
+Or set path explicitly:
 
 ```bash
 export LITESEARCH_SIMPLE_EXTENSION_PATH=/path/to/libsimple.so
 ```
 
 ```ruby
+# Rails: config.litestack.simple_extension_path = …
 Litesearch.simple_extension_path = "/path/to/libsimple.so"
 ```
 

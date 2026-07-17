@@ -55,7 +55,19 @@ bin/rails generate litestack:install
 bin/rails db:prepare
 ```
 
-The generator wires Litedb / Litecache / Litejob / Litecable configuration and adds SQLite paths to `.gitignore` / `.dockerignore`. Re-runs are largely idempotent.
+The generator wires **Litedb / Litecache / Litejob / Litecable**, drops
+`config/initializers/litestack_extensions.rb` (optional paths), and updates
+`.gitignore` / `.dockerignore`. Re-runs are largely idempotent.
+
+It does **not** download native extensions. For Chinese/Pinyin FTS (`libsimple`)
+or vector search (`vectorlite`), install binaries **into the app** and follow
+**[docs/RAILS_FULL_STACK.md](docs/RAILS_FULL_STACK.md)**:
+
+```bash
+export LITESTACK_EXTENSION_ROOT="$PWD"
+bundle exec ruby "$(bundle show litestack)/scripts/fetch_simple.rb"
+bundle exec ruby "$(bundle show litestack)/scripts/fetch_vectorlite.rb"
+```
 
 ### Data path
 
@@ -373,6 +385,7 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for worktree / issue-fix workflow and
 
 | Doc | Topic |
 |-----|--------|
+| **[docs/RAILS_FULL_STACK.md](docs/RAILS_FULL_STACK.md)** | **Rails 全栈安装 + libsimple / vectorlite 扩展（必读）** |
 | [docs/MIGRATING_TO_RUBY4_RAILS81.md](docs/MIGRATING_TO_RUBY4_RAILS81.md) | 1.0 upgrade, backups, Rails generator, Solid cleanup |
 | [docs/LITESEARCH_ZH_PINYIN.md](docs/LITESEARCH_ZH_PINYIN.md) | Chinese / Pinyin FTS (`:simple`) |
 | [docs/LITEVECTOR.md](docs/LITEVECTOR.md) | Vector search API and limits |

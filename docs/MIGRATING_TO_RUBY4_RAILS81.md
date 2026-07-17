@@ -46,6 +46,10 @@ bin/rails generate litestack:install
 bin/rails db:prepare
 ```
 
+Optional Chinese/Pinyin FTS and vector search need **app-local** native libraries
+(`libsimple`, `vectorlite`). They are **not** installed by the generator. See
+**[RAILS_FULL_STACK.md](RAILS_FULL_STACK.md)**.
+
 ### Solid Cache / Solid Queue
 
 The install generator **supersedes configuration** (cache store → `:litecache`, Active Job → `:litejob`) but **never** auto-deletes:
