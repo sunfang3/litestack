@@ -8,13 +8,10 @@ require_relative "../support/rails_app_builder"
 
 class Rails81AppTest < Minitest::Test
   def test_built_gem_rails81_smoke
-    unless system("which", "rails", out: File::NULL, err: File::NULL)
-      flunk "rails executable not on PATH — cannot prove launcher; install rails 8.1 CLI"
-    end
-
     builder = Litestack::RailsAppBuilder.new(root: File.expand_path("../..", __dir__))
     begin
       builder.build_and_install_gem!
+      # Installs rails CLI into an isolated GEM_HOME (no global rails required).
       builder.generate_app!
       builder.add_built_gem!
       builder.run_generator!

@@ -44,9 +44,23 @@ module Litestack
       end
     end
 
-    def generate_app!
+    def ensure_rails_cli!
+      # Isolated GEM_HOME so `rails` is available under with_unbundled_env
+      # (CI runners often have no global rails binstub).
+      run_unbundled!("gem", "install", "bundler", "--no-document")
       run_unbundled!(
-        "rails", "new", @app_dir,
+        "gem", "install", "rails", "-v", "8.1.3",
+        "--no-document", "--force"
+      )
+      rails_bin = File.join(@gem_home, "bin", "rails")
+      raise "rails CLI missing after gem install: #{rails_bin}" unless File.executable?(rails_bin)
+      rails_bin
+    end
+
+    def generate_app!
+      rails = ensure_rails_cli!
+      run_unbundled!(
+        rails, "new", @app_dir,
         "--minimal", "--skip-test", "--skip-system-test", "--skip-bootsnap",
         "--skip-javascript", "--skip-hotwire", "--skip-asset-pipeline",
         "-d", "sqlite3"
@@ -174,7 +188,10 @@ module Litestack
         BUNDLE_GEMFILE BUNDLE_BIN_PATH BUNDLE_ORIG_PATH BUNDLER_ORIG_MANPATH
         BUNDLER_VERSION BUNDLE_PATH BUNDLE_APP_CONFIG RUBYGEMS_GEMDEPS
       ].each { |k| env.delete(k) }
-      env["PATH"] = env["PATH"].to_s
+      env["GEM_HOME"] = @gem_home
+      env["GEM_PATH"] = @gem_home
+      gem_bin = File.join(@gem_home, "bin")
+      env["PATH"] = [gem_bin, env["PATH"].to_s].reject(&:empty?).join(File::PATH_SEPARATOR)
       if env["RUBYOPT"]
         env["RUBYOPT"] = env["RUBYOPT"].split(/\s+/).reject { |o| o.include?("bundler/setup") }.join(" ")
       end
