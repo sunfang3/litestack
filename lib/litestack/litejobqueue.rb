@@ -69,11 +69,22 @@ class Litejobqueue < Litequeue
     jobqueue(options)
   end
 
+  # True when the process looks like an interactive Rails console.
+  # Used to default workers to 0 so enqueue still works but background
+  # threads/fibers are not started (issue #118). Override with LITEJOB_WORKERS.
+  def self.rails_console_context?
+    return false unless defined?(Rails)
+    return true if defined?(Rails::Console)
+    return true if ARGV[0].to_s == "console" || ARGV.include?("console")
+    false
+  end
+
   # create new queue instance (only once instance will be created in the process)
   #   jobqueue = Litejobqueue.new
   #
   def initialize(options = {})
     @queues = [] # a place holder to allow workers to process
+    @explicit_workers = options.key?(:workers)
     super
 
     # group and order queues according to their priority
@@ -191,9 +202,23 @@ class Litejobqueue < Litequeue
     super
     @jobs_in_flight = 0
     @stopping = false
-    @workers = @options[:workers].times.collect { |i| track_worker(create_worker) }
-    @gc = track_worker(create_garbage_collector)
+    apply_worker_count_policy!
+    count = @options[:workers].to_i
+    @workers = count.times.collect { track_worker(create_worker) }
+    # Dead-job GC is a background worker too — skip it when no workers run
+    # (e.g. Rails console default).
+    @gc = (count > 0) ? track_worker(create_garbage_collector) : nil
     @mutex = Litescheduler::Mutex.new # reinitialize a mutex in setup as the environment could change after forking
+  end
+
+  # Prefer LITEJOB_WORKERS env, then explicit options[:workers], then console-safe default.
+  def apply_worker_count_policy!
+    if ENV.key?("LITEJOB_WORKERS")
+      @options[:workers] = Integer(ENV["LITEJOB_WORKERS"])
+    elsif !@explicit_workers && self.class.rails_console_context?
+      @options[:workers] = 0
+    end
+    @options[:workers] = 0 if @options[:workers].to_i.negative?
   end
 
   def job_started
