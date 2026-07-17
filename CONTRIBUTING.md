@@ -16,6 +16,33 @@ ruby -v   # expect 4.0.x
 bundle install
 ```
 
+## Issue fix workflow (`issue-fixes`)
+
+Post-1.0 GitHub issue follow-ups land on the integration branch **`issue-fixes`**.
+
+For each issue:
+
+1. **Worktree + branch** (from current `issue-fixes`):
+   ```bash
+   git fetch origin
+   git checkout issue-fixes && git pull --ff-only
+   git worktree add -b fix/issue-NNN-short-slug .worktrees/issue-NNN issue-fixes
+   cd .worktrees/issue-NNN
+   bundle install
+   ```
+2. **Fix + tests** in the worktree (TDD when practical); keep commits focused on that issue.
+3. **Merge into `issue-fixes`** (from repo root):
+   ```bash
+   git checkout issue-fixes
+   git merge --no-ff fix/issue-NNN-short-slug
+   # optional cleanup:
+   git worktree remove .worktrees/issue-NNN
+   git branch -d fix/issue-NNN-short-slug
+   ```
+4. Do **not** land issue patches straight on `master` unless intentionally releasing; keep `master` as the 1.0 modernization line until a release cut.
+
+`.worktrees/` is gitignored.
+
 ## Tests
 
 ```bash
