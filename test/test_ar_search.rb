@@ -152,6 +152,11 @@ class TestActiveRecordLitesearch < Minitest::Test
       db.execute("CREATE TABLE posts(post_id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), author_id TEXT, title TEXT, content TEXT, created_at TEXT, updated_at TEXT)")
     end
 
+    # Fresh connection may leave stale column caches from other AR test files.
+    [Author, Publisher, Book, Review, Comment, User, Post, RichText].each do |model|
+      model.reset_column_information if model.respond_to?(:reset_column_information)
+    end
+
     # Re-bind search indexes to the current connection (indexes are connection-local).
     Author.litesearch { |schema| schema.field :name }
     User.litesearch do |schema|
@@ -337,7 +342,13 @@ class TestActiveRecordLitesearch < Minitest::Test
 
   def test_ignore_tables
     assert_equal false, ActiveRecord::SchemaDumper.ignore_tables.empty?
-    # we have created 8 models, one ignore regex for each
-    assert_equal 8, ActiveRecord::SchemaDumper.ignore_tables.count
+    # Each Litesearch model registers one ignore regex for its FTS index tables.
+    # Count may be higher when other AR test files load in the same process.
+    assert_operator ActiveRecord::SchemaDumper.ignore_tables.count, :>=, 8
+    patterns = ActiveRecord::SchemaDumper.ignore_tables.map(&:to_s)
+    %w[authors books posts users reviews comments].each do |table|
+      assert patterns.any? { |p| p.include?(table) },
+        "expected SchemaDumper.ignore_tables to cover #{table}_search_idx"
+    end
   end
 end

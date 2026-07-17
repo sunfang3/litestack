@@ -3,6 +3,9 @@
 # Coverage for GitHub issue #143:
 # Litesearch AR `search` must not interpolate the user term into SQL unescaped.
 # https://github.com/oldmoe/litestack/issues/143
+#
+# Uses dedicated model names (not Author/Book) so full-suite loads do not
+# clobber test/test_ar_search.rb constants or schemas.
 
 require "minitest/autorun"
 require "active_record"
@@ -13,36 +16,57 @@ require "active_support/notifications"
 $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
 require "active_record/connection_adapters/litedb_adapter"
 
+# Connection required before Litesearch::Model include (registers attributes).
 ActiveRecord::Base.establish_connection(adapter: "litedb", database: ":memory:")
-
 db = ActiveRecord::Base.connection.raw_connection
-db.execute("CREATE TABLE authors(id INTEGER PRIMARY KEY, name TEXT, created_at TEXT, updated_at TEXT)")
-db.execute("CREATE TABLE books(id INTEGER PRIMARY KEY, title TEXT, description TEXT, author_id INTEGER, created_at TEXT, updated_at TEXT)")
+db.execute("CREATE TABLE sqli_authors(id INTEGER PRIMARY KEY, name TEXT, created_at TEXT, updated_at TEXT)")
+db.execute("CREATE TABLE sqli_books(id INTEGER PRIMARY KEY, title TEXT, description TEXT, author_id INTEGER, created_at TEXT, updated_at TEXT)")
 
-class ApplicationRecord < ActiveRecord::Base
-  primary_abstract_class
-end
-
-class Author < ApplicationRecord
-  include Litesearch::Model
-
-  litesearch do |schema|
-    schema.field :name
+# Dedicated names / tables so we never redefine global Author/Book used by test_ar_search.
+module LitesearchSqliFixture
+  class ApplicationRecord < ActiveRecord::Base
+    self.abstract_class = true
   end
-end
 
-class Book < ApplicationRecord
-  belongs_to :author, optional: true
+  class Author < ApplicationRecord
+    self.table_name = "sqli_authors"
 
-  include Litesearch::Model
+    include Litesearch::Model
 
-  litesearch do |schema|
-    schema.fields [:title, :description]
+    litesearch do |schema|
+      schema.field :name
+    end
+  end
+
+  class Book < ApplicationRecord
+    self.table_name = "sqli_books"
+
+    belongs_to :author, class_name: "LitesearchSqliFixture::Author", optional: true
+
+    include Litesearch::Model
+
+    litesearch do |schema|
+      schema.fields [:title, :description]
+    end
   end
 end
 
 class TestLitesearchArSearchSqlInjection < Minitest::Test
+  Author = LitesearchSqliFixture::Author
+  Book = LitesearchSqliFixture::Book
+
+  def ensure_schema!
+    # Other AR test files may have replaced the :memory: connection.
+    ActiveRecord::Base.establish_connection(adapter: "litedb", database: ":memory:")
+    db = ActiveRecord::Base.connection.raw_connection
+    db.execute("CREATE TABLE IF NOT EXISTS sqli_authors(id INTEGER PRIMARY KEY, name TEXT, created_at TEXT, updated_at TEXT)")
+    db.execute("CREATE TABLE IF NOT EXISTS sqli_books(id INTEGER PRIMARY KEY, title TEXT, description TEXT, author_id INTEGER, created_at TEXT, updated_at TEXT)")
+    Author.reset_column_information
+    Book.reset_column_information
+  end
+
   def setup
+    ensure_schema!
     Author.delete_all
     Book.delete_all
     # Ensure indexes exist on this connection
