@@ -155,9 +155,7 @@ module Litevector
     def close
       return self if @closed
       begin
-        if @db
-          @db.close
-        end
+        @db&.close
       rescue => e
         raise PersistenceError, "failed closing vector index: #{e.class}: #{e.message}"
       ensure
@@ -168,12 +166,10 @@ module Litevector
       self
     end
 
+    attr_reader :db_path
+
     def path
       @index_file
-    end
-
-    def db_path
-      @db_path
     end
 
     private

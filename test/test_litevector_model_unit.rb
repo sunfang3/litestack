@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Litevector::Model unit tests without native extension (stub Index).
+# Litevector::Model unit tests without native extension (inject fake index).
 
 require_relative "helper"
 require "active_record"
@@ -47,24 +47,13 @@ class TestLitevectorModelUnit < Minitest::Test
     end
     def @fake_index.close
     end
-    def @fake_index.open!
-      self
-    end
 
-    # Avoid real extension: replace Index.new used by Model
-    @orig_new = Litevector::Index.method(:new)
-    fake = @fake_index
-    Litevector::Index.define_singleton_method(:new) { |**_opts| fake }
-
-    Doc.litevector do |schema|
-      schema.dimensions 3
-      schema.max_elements 100
-      schema.source :embedding
-    end
+    # Wire model state without calling Index.new/open! (avoids extension).
+    Doc.instance_variable_set(:@litevector_index, @fake_index)
+    Doc.instance_variable_set(:@litevector_source, :embedding)
   end
 
   def teardown
-    Litevector::Index.define_singleton_method(:new, @orig_new) if @orig_new
     Litesupport.reset_configuration! if defined?(Litesupport) && Litesupport.respond_to?(:reset_configuration!)
     FileUtils.rm_rf(@tmpdir) if @tmpdir
   end
@@ -99,5 +88,10 @@ class TestLitevectorModelUnit < Minitest::Test
   def test_reindex_requires_persisted
     d = Doc.new(embedding_json: JSON.generate([1.0, 0.0, 0.0]))
     assert_raises(ArgumentError) { d.reindex_vector! }
+  end
+
+  def test_litevector_source_reader
+    assert_equal :embedding, Doc.litevector_source
+    assert_same @fake_index, Doc.litevector_index
   end
 end

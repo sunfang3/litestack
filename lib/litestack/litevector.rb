@@ -4,7 +4,6 @@
 # Require explicitly: require "litestack/litevector"
 # Does not load as part of require "litestack".
 
-require "pathname"
 require_relative "litevector/errors"
 require_relative "litevector/vector"
 require_relative "litevector/extension"

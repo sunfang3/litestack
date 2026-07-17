@@ -176,8 +176,8 @@ class Litestack::InstallGenerator < Rails::Generators::Base
     want_simple = options[:with_simple] || options[:with_extensions]
     want_vector = options[:with_vectorlite] || options[:with_extensions]
 
+    say ""
     if want_simple || want_vector
-      say ""
       say "Requested extensions:", :green
       say "  libsimple   → vendor/simple/<platform>/     #{want_simple ? "(requested)" : "(not requested)"}"
       say "  vectorlite  → vendor/vectorlite/<platform>/ #{want_vector ? "(requested)" : "(not requested)"}"
@@ -189,7 +189,6 @@ class Litestack::InstallGenerator < Rails::Generators::Base
         say "    bundle exec ruby \"$(bundle show litestack)/scripts/fetch_vectorlite.rb\"" if want_vector
       end
     else
-      say ""
       say "Optional native extensions (not installed — pass flags to fetch now):", :yellow
       say "  bin/rails g litestack:install --with-simple          # Chinese/Pinyin FTS"
       say "  bin/rails g litestack:install --with-vectorlite      # vector kNN"

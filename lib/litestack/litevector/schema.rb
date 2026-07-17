@@ -5,8 +5,7 @@ module Litevector
   class Schema
     DISTANCES = %i[l2 cosine ip].freeze
 
-    attr_reader :name, :dimensions, :distance, :max_elements,
-      :ef_construction, :m, :vector_column, :index_file
+    attr_reader :name
 
     def initialize(name: nil)
       @name = name&.to_s

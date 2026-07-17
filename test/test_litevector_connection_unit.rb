@@ -10,25 +10,26 @@ require "fileutils"
 class TestLitevectorConnectionUnit < Minitest::Test
   def setup
     @tmpdir = Dir.mktmpdir("lv-conn-unit-")
-    @orig_load = Litevector::Extension.method(:load!)
-    @orig_new = Litevector::Index.method(:new)
-    @orig_open = Litevector::Index.method(:open)
-
-    Litevector::Extension.define_singleton_method(:load!) { |db| db.instance_variable_set(:@lv, true); "/fake.so" }
-
-    fake = Object.new
-    def fake.open!
+    Litevector::Extension.load_hook = lambda { |db|
+      db.instance_variable_set(:@hooked, true)
+      "/fake.so"
+    }
+    @fake_index = Object.new
+    def @fake_index.open!
       self
     end
-    def fake.close
+    def @fake_index.close
     end
+
+    @orig_new = Litevector::Index.method(:new)
+    @orig_open = Litevector::Index.method(:open)
+    fake = @fake_index
     Litevector::Index.define_singleton_method(:new) { |**_| fake }
     Litevector::Index.define_singleton_method(:open) { |**_| fake }
-    @fake = fake
   end
 
   def teardown
-    Litevector::Extension.define_singleton_method(:load!, @orig_load)
+    Litevector::Extension.load_hook = nil
     Litevector::Index.define_singleton_method(:new, @orig_new)
     Litevector::Index.define_singleton_method(:open, @orig_open)
     FileUtils.rm_rf(@tmpdir) if @tmpdir
@@ -38,7 +39,7 @@ class TestLitevectorConnectionUnit < Minitest::Test
     db = SQLite3::Database.new(":memory:")
     db.extend(Litevector::Connection)
     assert_same db, db.ensure_vectorlite!
-    # Connection#vectorlite_info runs SQL; stub get_first_value after load
+    assert Litevector::Extension.loaded?(db)
     def db.get_first_value(*)
       "fake-info"
     end
@@ -52,9 +53,9 @@ class TestLitevectorConnectionUnit < Minitest::Test
       s.dimensions 2
       s.max_elements 10
     end
-    assert_same @fake, idx
+    assert_same @fake_index, idx
 
     opened = db.vector_index(:x, data_path: @tmpdir)
-    assert_same @fake, opened
+    assert_same @fake_index, opened
   end
 end

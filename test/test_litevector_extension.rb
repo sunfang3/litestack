@@ -92,9 +92,14 @@ class TestLitevectorExtension < Minitest::Test
 
   def test_info_and_loaded_predicate
     VectorliteHelper.skip_unless_available!(self)
+    # Ensure no unit-test hook is left over from other files.
+    Litevector::Extension.load_hook = nil
     Litevector.extension_path = VectorliteHelper.extension_path
     db = SQLite3::Database.new(":memory:")
     refute Litevector::Extension.loaded?(db)
+    path = Litevector::Extension.load!(db)
+    assert path
+    assert Litevector::Extension.loaded?(db), "load! must mark connection as loaded"
     info = Litevector::Extension.info(db)
     assert_match(/vectorlite/i, info.to_s)
     assert Litevector::Extension.loaded?(db)

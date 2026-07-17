@@ -41,17 +41,16 @@ class TestLitevectorIndexUnit < Minitest::Test
     @tmpdir = Dir.mktmpdir("lv-unit-")
     @fake = FakeVectorDb.new
     @db_new = SQLite3::Database.method(:new)
-    @ext_load = Litevector::Extension.method(:load!)
 
     fake = @fake
     SQLite3::Database.define_singleton_method(:new) { |*_a, **_k| fake }
-    Litevector::Extension.define_singleton_method(:load!) { |_db| "/fake/vectorlite.so" }
+    Litevector::Extension.load_hook = ->(_db) { "/fake/vectorlite.so" }
     Litevector.reset_configuration!
   end
 
   def teardown
     SQLite3::Database.define_singleton_method(:new, @db_new)
-    Litevector::Extension.define_singleton_method(:load!, @ext_load)
+    Litevector::Extension.load_hook = nil
     Litevector.reset_configuration!
     FileUtils.rm_rf(@tmpdir) if @tmpdir
   end
@@ -121,11 +120,10 @@ class TestLitevectorIndexUnit < Minitest::Test
 
   def test_info
     idx = Litevector::Index.create(name: "info", dimensions: 2, max_elements: 5, data_path: @tmpdir)
-    Litevector::Extension.define_singleton_method(:info) { |_db| "vectorlite ok" }
-    assert_equal "vectorlite ok", idx.info
+    Litevector::Extension.stub(:info, "vectorlite ok") do
+      assert_equal "vectorlite ok", idx.info
+    end
     idx.close
-  ensure
-    Litevector::Extension.define_singleton_method(:load!) { |_db| "/fake/vectorlite.so" }
   end
 
   def test_initialize_from_hash_schema

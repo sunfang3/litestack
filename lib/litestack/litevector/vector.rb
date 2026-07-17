@@ -16,7 +16,7 @@ module Litevector
           raise DimensionMismatchError,
             "binary vector length #{bin.bytesize} != #{dimensions * 4} bytes (#{dimensions} dims)"
         end
-        return bin
+        bin
       when Array
         if dimensions && values.length != dimensions
           raise DimensionMismatchError,

@@ -9,6 +9,11 @@ module Litevector
 
     VENDOR_ROOT = File.expand_path("../../../vendor/vectorlite", __dir__)
 
+    # Test hook: callable.(db) — when set, replaces real load_extension.
+    class << self
+      attr_accessor :load_hook
+    end
+
     def platform_key
       os = RbConfig::CONFIG["host_os"]
       cpu = RbConfig::CONFIG["host_cpu"]
@@ -64,6 +69,13 @@ module Litevector
     # Load extension into +db+ (SQLite3::Database). Idempotent per connection via ivar flag.
     def load!(db)
       return db if db.instance_variable_get(:@litevector_loaded)
+
+      if (hook = Extension.load_hook)
+        path = hook.call(db)
+        db.instance_variable_set(:@litevector_loaded, true)
+        db.instance_variable_set(:@litevector_extension_path, path)
+        return path
+      end
 
       path = resolve_path
       begin
