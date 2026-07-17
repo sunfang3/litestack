@@ -47,9 +47,9 @@ class TestInstallGenerator < Minitest::Test
     FileUtils.rm_rf(@root)
   end
 
-  def run_generator
+  def run_generator(args = [])
     Dir.chdir(@root) do
-      Rails::Generators.invoke("litestack:install", [], behavior: :invoke, destination_root: @root)
+      Rails::Generators.invoke("litestack:install", args, behavior: :invoke, destination_root: @root)
     end
   end
 
@@ -117,5 +117,61 @@ class TestInstallGenerator < Minitest::Test
     assert_match(/cable:/, db)
     assert_match(/primary:/, db)
     assert_match(/adapter:\s*litedb/, db)
+  end
+
+  def with_fetch_hook
+    fetches = []
+    Litestack::InstallGenerator.extension_fetch_hook = lambda { |gen, kind, _label|
+      fetches << kind
+      platform = "linux-x86_64"
+      base = (kind == "simple") ? "simple" : "vectorlite"
+      name = (kind == "simple") ? "libsimple.so" : "vectorlite.so"
+      dir = File.join(gen.destination_root, "vendor", base, platform)
+      FileUtils.mkdir_p(dir)
+      File.binwrite(File.join(dir, name), "stub")
+    }
+    yield fetches
+  ensure
+    Litestack::InstallGenerator.extension_fetch_hook = nil
+  end
+
+  def test_with_extensions_flags_invoke_fetch
+    with_fetch_hook do |fetches|
+      run_generator(["--with-extensions"])
+      assert_equal %w[simple vectorlite], fetches
+      assert File.file?(File.join(@root, "vendor/simple/linux-x86_64/libsimple.so"))
+      assert File.file?(File.join(@root, "vendor/vectorlite/linux-x86_64/vectorlite.so"))
+    end
+  end
+
+  def test_with_simple_only_fetches_simple
+    with_fetch_hook do |fetches|
+      run_generator(["--with-simple"])
+      assert_equal %w[simple], fetches
+    end
+  end
+
+  def test_with_vectorlite_only_fetches_vectorlite
+    with_fetch_hook do |fetches|
+      run_generator(["--with-vectorlite"])
+      assert_equal %w[vectorlite], fetches
+    end
+  end
+
+  def test_skip_fetch_env_skips_download
+    with_fetch_hook do |fetches|
+      ENV["LITESTACK_GENERATOR_SKIP_FETCH"] = "1"
+      run_generator(["--with-extensions"])
+      assert_empty fetches
+    ensure
+      ENV.delete("LITESTACK_GENERATOR_SKIP_FETCH")
+    end
+  end
+
+  def test_without_flags_does_not_fetch
+    with_fetch_hook do |fetches|
+      run_generator
+      assert_empty fetches
+    end
   end
 end

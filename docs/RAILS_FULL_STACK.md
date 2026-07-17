@@ -35,7 +35,7 @@
 # Gemfile / 依赖
 bundle add litestack   # Ruby >= 4.0, Rails >= 8.1
 
-# 一键改配置
+# 一键改配置（仅核心栈）
 bin/rails generate litestack:install
 bin/rails db:prepare
 ```
@@ -45,8 +45,40 @@ bin/rails db:prepare
 - `database.yml` / `cable.yml`
 - production 的 cache / Active Job
 - `.gitignore` / `.dockerignore` 中的 SQLite 路径  
+- `config/initializers/litestack_extensions.rb`（扩展 path 探测）
 
-**不会**下载 vectorlite / libsimple，也**不会**删除 Solid gems（见迁移文档）。
+**默认不会**下载 vectorlite / libsimple，也**不会**删除 Solid gems（见迁移文档）。
+
+### 安装时一并下载扩展（推荐显式一键）
+
+需要中文/拼音和/或向量时，用 generator 参数（需网络 + `python3`）：
+
+```bash
+# 只要中文/拼音 FTS
+bin/rails generate litestack:install --with-simple
+
+# 只要向量检索
+bin/rails generate litestack:install --with-vectorlite
+
+# 两个都要
+bin/rails generate litestack:install --with-extensions
+```
+
+效果：
+
+1. 仍配置核心全栈 + initializer  
+2. 以 `LITESTACK_EXTENSION_ROOT=<app root>` 运行 gem 内 `scripts/fetch_*.rb`  
+3. 二进制落到 **`应用`** 的 `vendor/simple/...`、`vendor/vectorlite/...`  
+
+无网环境可先装配置、稍后再下：
+
+```bash
+LITESTACK_GENERATOR_SKIP_FETCH=1 bin/rails g litestack:install --with-extensions
+# 之后在应用根：
+export LITESTACK_EXTENSION_ROOT="$PWD"
+bundle exec ruby "$(bundle show litestack)/scripts/fetch_simple.rb"
+bundle exec ruby "$(bundle show litestack)/scripts/fetch_vectorlite.rb"
+```
 
 ### 数据目录（推荐）
 
@@ -318,12 +350,20 @@ COPY . .
 ## 9. 一键命令备忘
 
 ```bash
-# 核心
+# 核心 only
 bundle add litestack
 bin/rails generate litestack:install
 bin/rails db:prepare
 
-# 可选扩展（在 Rails 根目录）
+# 核心 + 扩展（推荐）
+bin/rails generate litestack:install --with-extensions
+bin/rails db:prepare
+
+# 或只下其中一个
+bin/rails g litestack:install --with-simple
+bin/rails g litestack:install --with-vectorlite
+
+# 手动扩展（在 Rails 根目录）
 export LITESTACK_EXTENSION_ROOT="$PWD"
 export GEM_LITESTACK="$(bundle show litestack)"
 bundle exec ruby "$GEM_LITESTACK/scripts/fetch_simple.rb"

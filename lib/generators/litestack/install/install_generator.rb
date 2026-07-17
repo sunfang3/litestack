@@ -5,6 +5,20 @@ class Litestack::InstallGenerator < Rails::Generators::Base
 
   desc "Install Litestack adapters for database, cache, jobs, and Action Cable"
 
+  class_option :with_simple, type: :boolean, default: false,
+    desc: "Download wangfenjin/simple (libsimple) into vendor/ for Chinese/Pinyin FTS"
+
+  class_option :with_vectorlite, type: :boolean, default: false,
+    desc: "Download vectorlite into vendor/ for Litevector kNN search"
+
+  class_option :with_extensions, type: :boolean, default: false,
+    desc: "Shortcut for --with-simple --with-vectorlite"
+
+  # Test hook: callable.(generator, kind, label) — when set, skips network download.
+  class << self
+    attr_accessor :extension_fetch_hook
+  end
+
   def modify_database_adapter
     if File.exist?(File.join(destination_root, "config/database.yml"))
       # Prefer structured merge of adapter/database keys without wiping multi-db config
@@ -134,18 +148,59 @@ class Litestack::InstallGenerator < Rails::Generators::Base
     TEXT
   end
 
+  # Optional: --with-simple / --with-vectorlite / --with-extensions
+  # Downloads native .so into the app vendor/ (needs network + python3).
+  def fetch_optional_native_extensions
+    want_simple = options[:with_simple] || options[:with_extensions]
+    want_vector = options[:with_vectorlite] || options[:with_extensions]
+    return unless want_simple || want_vector
+
+    if skip_extension_fetch?
+      say_status :skip,
+        "native extension download (LITESTACK_GENERATOR_SKIP_FETCH=1)",
+        :yellow
+      return
+    end
+
+    say ""
+    say "Fetching optional native extensions into #{destination_root}/vendor/ …", :green
+
+    fetch_extension!("simple", "libsimple (Chinese/Pinyin FTS)") if want_simple
+    fetch_extension!("vectorlite", "vectorlite (Litevector kNN)") if want_vector
+  end
+
   def print_optional_solid_cleanup
     say ""
     say "Litestack core stack installed (Litedb / Litecache / Litejob / Litecable).", :green
-    say ""
-    say "Optional native extensions (NOT installed by this generator):", :yellow
-    say "  Chinese/Pinyin FTS → libsimple   |  Vector kNN → vectorlite"
-    say "  From the Rails root:"
-    say "    export LITESTACK_EXTENSION_ROOT=\"$PWD\""
-    say "    bundle exec ruby \"$(bundle show litestack)/scripts/fetch_simple.rb\""
-    say "    bundle exec ruby \"$(bundle show litestack)/scripts/fetch_vectorlite.rb\""
-    say "  Paths are wired in config/initializers/litestack_extensions.rb when files exist."
-    say "  Full guide: docs/RAILS_FULL_STACK.md (in the litestack gem / repo)."
+
+    want_simple = options[:with_simple] || options[:with_extensions]
+    want_vector = options[:with_vectorlite] || options[:with_extensions]
+
+    if want_simple || want_vector
+      say ""
+      say "Requested extensions:", :green
+      say "  libsimple   → vendor/simple/<platform>/     #{want_simple ? "(requested)" : "(not requested)"}"
+      say "  vectorlite  → vendor/vectorlite/<platform>/ #{want_vector ? "(requested)" : "(not requested)"}"
+      say "  Paths: config/initializers/litestack_extensions.rb"
+      if skip_extension_fetch?
+        say "  Download was skipped (LITESTACK_GENERATOR_SKIP_FETCH=1). Run manually:", :yellow
+        say "    export LITESTACK_EXTENSION_ROOT=\"$PWD\""
+        say "    bundle exec ruby \"$(bundle show litestack)/scripts/fetch_simple.rb\"" if want_simple
+        say "    bundle exec ruby \"$(bundle show litestack)/scripts/fetch_vectorlite.rb\"" if want_vector
+      end
+    else
+      say ""
+      say "Optional native extensions (not installed — pass flags to fetch now):", :yellow
+      say "  bin/rails g litestack:install --with-simple          # Chinese/Pinyin FTS"
+      say "  bin/rails g litestack:install --with-vectorlite      # vector kNN"
+      say "  bin/rails g litestack:install --with-extensions      # both"
+      say "  Or later from the Rails root:"
+      say "    export LITESTACK_EXTENSION_ROOT=\"$PWD\""
+      say "    bundle exec ruby \"$(bundle show litestack)/scripts/fetch_simple.rb\""
+      say "    bundle exec ruby \"$(bundle show litestack)/scripts/fetch_vectorlite.rb\""
+    end
+
+    say "  Full guide: docs/RAILS_FULL_STACK.md"
     say ""
     say "Optional cleanup if you do not need Solid Cache/Queue:", :green
     say "  - Remove solid_cache / solid_queue gems from the Gemfile (manual)"
@@ -160,6 +215,64 @@ class Litestack::InstallGenerator < Rails::Generators::Base
     "/db/**/*.sqlite3",
     "/db/**/*.sqlite3-*"
   ].freeze
+
+  def skip_extension_fetch?
+    ENV["LITESTACK_GENERATOR_SKIP_FETCH"] == "1"
+  end
+
+  def scripts_root
+    # lib/generators/litestack/install → repo/gem root
+    File.expand_path("../../../../scripts", __dir__)
+  end
+
+  def fetch_extension!(kind, label)
+    if (hook = self.class.extension_fetch_hook)
+      return hook.call(self, kind, label)
+    end
+
+    script = case kind
+    when "simple" then "fetch_simple.rb"
+    when "vectorlite" then "fetch_vectorlite.rb"
+    else
+      raise ArgumentError, "unknown extension kind: #{kind}"
+    end
+
+    path = File.join(scripts_root, script)
+    unless File.file?(path)
+      say_status :error, "fetch script missing: #{path}", :red
+      raise Thor::Error,
+        "Could not find #{script}. Reinstall the litestack gem or fetch extensions manually."
+    end
+
+    root = File.expand_path(destination_root)
+    env = {
+      "LITESTACK_EXTENSION_ROOT" => root,
+      "PATH" => ENV["PATH"].to_s
+    }
+    # Preserve SSL / proxy vars when present
+    %w[http_proxy https_proxy HTTP_PROXY HTTPS_PROXY SSL_CERT_FILE SSL_CERT_DIR].each do |k|
+      env[k] = ENV[k] if ENV[k]
+    end
+
+    say_status :fetch, "#{label} (LITESTACK_EXTENSION_ROOT=#{root})", :green
+    ok = system(env, Gem.ruby, path, chdir: root)
+    unless ok
+      say_status :error, "Failed to fetch #{label}", :red
+      raise Thor::Error,
+        "Failed to download #{label}. Need network access and python3. " \
+        "Or set LITESTACK_GENERATOR_SKIP_FETCH=1 and fetch later. " \
+        "See docs/RAILS_FULL_STACK.md."
+    end
+    say_status :create, vendor_hint_for(kind), :green
+  end
+
+  def vendor_hint_for(kind)
+    case kind
+    when "simple" then "vendor/simple/<platform>/libsimple.so"
+    when "vectorlite" then "vendor/vectorlite/<platform>/vectorlite.so"
+    else "vendor/#{kind}/"
+    end
+  end
 
   def append_sqlite_ignore_patterns(relative_path, marker:)
     path = File.join(destination_root, relative_path)
@@ -194,4 +307,3 @@ class Litestack::InstallGenerator < Rails::Generators::Base
     end
   end
 end
-

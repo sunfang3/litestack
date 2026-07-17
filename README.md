@@ -59,11 +59,19 @@ The generator wires **Litedb / Litecache / Litejob / Litecable**, drops
 `config/initializers/litestack_extensions.rb` (optional paths), and updates
 `.gitignore` / `.dockerignore`. Re-runs are largely idempotent.
 
-It does **not** download native extensions. For Chinese/Pinyin FTS (`libsimple`)
-or vector search (`vectorlite`), install binaries **into the app** and follow
+Native extensions are **optional**. Fetch at install time with explicit flags
+(needs network + `python3`), or later manually — see
 **[docs/RAILS_FULL_STACK.md](docs/RAILS_FULL_STACK.md)**:
 
 ```bash
+# one-shot: core stack + both extensions into app vendor/
+bin/rails generate litestack:install --with-extensions
+
+# or only one:
+bin/rails g litestack:install --with-simple       # Chinese/Pinyin FTS
+bin/rails g litestack:install --with-vectorlite   # vector kNN
+
+# manual (Rails root):
 export LITESTACK_EXTENSION_ROOT="$PWD"
 bundle exec ruby "$(bundle show litestack)/scripts/fetch_simple.rb"
 bundle exec ruby "$(bundle show litestack)/scripts/fetch_vectorlite.rb"

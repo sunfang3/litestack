@@ -11,16 +11,25 @@ Description:
       - config/initializers/litestack_extensions.rb → optional libsimple / vectorlite paths
       - .gitignore → vendor/simple & vendor/vectorlite binary patterns
 
-    Does NOT download libsimple or vectorlite. Fetch them into the app when needed:
+    Optional native extension download (needs network + python3):
+      --with-simple       Download wangfenjin/simple (libsimple) into vendor/simple/
+      --with-vectorlite   Download vectorlite into vendor/vectorlite/
+      --with-extensions   Both of the above
+
+    Example:
+      bin/rails generate litestack:install
+      bin/rails generate litestack:install --with-simple
+      bin/rails generate litestack:install --with-vectorlite
+      bin/rails generate litestack:install --with-extensions
+
+    Skip download during generate (e.g. CI without network) and fetch later:
+      LITESTACK_GENERATOR_SKIP_FETCH=1 bin/rails g litestack:install --with-extensions
       export LITESTACK_EXTENSION_ROOT="$PWD"
       bundle exec ruby "$(bundle show litestack)/scripts/fetch_simple.rb"
-      bundle exec ruby "$(bundle show litestack)/scripts/fetch_vectorlite.rb"
-    See docs/RAILS_FULL_STACK.md.
+
+    Full guide: docs/RAILS_FULL_STACK.md
 
     Does NOT automatically remove solid_cache, solid_queue, their migrations, or Gemfile lines.
     Optional cleanup steps are printed after install. See docs/MIGRATING_TO_RUBY4_RAILS81.md.
-
-Example:
-    bin/rails generate litestack:install
 
     Re-running the generator is idempotent for already-configured keys.
