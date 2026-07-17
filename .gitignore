@@ -15,3 +15,8 @@ Gemfile.lock
 
 # Built gem artifacts
 *.gem
+
+# vectorlite native binaries (fetch via scripts/fetch_vectorlite.rb)
+/vendor/vectorlite/**/*.so
+/vendor/vectorlite/**/*.dylib
+/vendor/vectorlite/**/*.dll
