@@ -11,6 +11,7 @@ require_relative "litevector/extension"
 require_relative "litevector/schema"
 require_relative "litevector/index"
 require_relative "litevector/connection"
+require_relative "litevector/model"
 
 module Litevector
   class << self

@@ -17,6 +17,7 @@ module Litevector
       @m = 16
       @vector_column = "embedding"
       @index_file = nil
+      @source = :embedding
     end
 
     def name=(value)
@@ -68,6 +69,12 @@ module Litevector
       @index_file = value.to_s
     end
 
+    # Attribute / method name used by Litevector::Model for embeddings.
+    def source(value = nil)
+      return @source if value.nil?
+      @source = value.to_sym
+    end
+
     def validate!
       raise ArgumentError, "name is required" if name.nil? || name.empty?
       raise ArgumentError, "dimensions is required" if dimensions.nil?
@@ -88,7 +95,8 @@ module Litevector
         ef_construction: ef_construction,
         m: m,
         vector_column: vector_column,
-        index_file: index_file
+        index_file: index_file,
+        source: source
       }
     end
 
@@ -102,6 +110,7 @@ module Litevector
       s.m(h[:m]) if h[:m]
       s.vector_column(h[:vector_column]) if h[:vector_column]
       s.index_file(h[:index_file]) if h[:index_file]
+      s.source(h[:source]) if h[:source]
       s
     end
 

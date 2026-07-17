@@ -69,6 +69,25 @@ db.ensure_vectorlite!
 puts db.vectorlite_info
 ```
 
+## Active Record
+
+```ruby
+class Document < ApplicationRecord
+  include Litevector::Model
+
+  litevector do |schema|
+    schema.dimensions 1536
+    schema.distance :cosine
+    schema.max_elements 100_000
+    schema.source :embedding   # method returning Array or float32 binary
+  end
+end
+
+doc = Document.create!(...)
+doc.reindex_vector!
+Document.nearest_neighbors(query, k: 10)  # ordered; each has #vector_distance
+```
+
 ## Limitations (engine)
 
 | Topic | Behavior |
