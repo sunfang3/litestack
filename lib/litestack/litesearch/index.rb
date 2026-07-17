@@ -71,9 +71,11 @@ class Litesearch::Index
 
   def rebuild!
     if @db.transaction_active?
-      do_rebuild
+      with_destructive_protection!("rebuild") { do_rebuild }
     else
-      @db.transaction(:immediate) { do_rebuild }
+      @db.transaction(:immediate) do
+        with_destructive_protection!("rebuild") { do_rebuild }
+      end
     end
   end
 
@@ -121,13 +123,19 @@ class Litesearch::Index
   end
 
   def drop!
-    if @schema.get(:type) == :backed
-      @db.execute_batch(@schema.sql_for(:drop_primary_triggers))
-      if @schema.sql_for(:create_secondary_triggers)
-        @db.execute_batch(@schema.sql_for(:drop_secondary_triggers))
+    with_destructive_protection!("drop") do
+      if @schema.get(:type) == :backed
+        @db.execute_batch(@schema.sql_for(:drop_primary_triggers))
+        if @schema.sql_for(:create_secondary_triggers)
+          @db.execute_batch(@schema.sql_for(:drop_secondary_triggers))
+        end
       end
+      @db.execute(@schema.sql_for(:drop))
     end
-    @db.execute(@schema.sql_for(:drop))
+  end
+
+  def last_migration_backup
+    @last_migration_backup
   end
 
   private
@@ -188,37 +196,46 @@ class Litesearch::Index
       requires_rebuild = changes[:tokenizer] || new_schema.get(:rebuild_on_modify)
       requires_trigger_change = (changes[:table] || changes[:fields] || changes[:filter_column]) && @schema.get(:type) == :backed
     end
-    if requires_schema_change
-      # 1. enable schema editing
-      @db.execute("PRAGMA WRITABLE_SCHEMA = TRUE")
-      # 2. update the index sql
-      @db.execute(new_schema.sql_for(:update_index), new_schema.sql_for(:create_index))
-      # 3. update the content table sql (if it exists)
-      @db.execute(new_schema.sql_for(:update_content_table), new_schema.sql_for(:create_content_table, new_schema.schema[:fields].count))
-      # adjust shadow tables
-      @db.execute(new_schema.sql_for(:expand_data), changes[:extra_fields_count])
-      @db.execute(new_schema.sql_for(:expand_docsize), changes[:extra_fields_count])
-      @db.execute("PRAGMA WRITABLE_SCHEMA = RESET")
-      # need to reprepare statements
-    end
-    if requires_trigger_change
-      @db.execute_batch(new_schema.sql_for(:drop_primary_triggers))
-      @db.execute_batch(new_schema.sql_for(:create_primary_triggers))
-      if (secondary_triggers_sql = new_schema.sql_for(:create_secondary_triggers))
-        @db.execute_batch(new_schema.sql_for(:drop_secondary_triggers))
-        @db.execute_batch(secondary_triggers_sql)
+    destructive = requires_schema_change || requires_trigger_change || requires_rebuild
+    apply_modify = lambda do
+      if requires_schema_change
+        # 1. enable schema editing
+        @db.execute("PRAGMA WRITABLE_SCHEMA = TRUE")
+        # 2. update the index sql
+        @db.execute(new_schema.sql_for(:update_index), new_schema.sql_for(:create_index))
+        # 3. update the content table sql (if it exists)
+        @db.execute(new_schema.sql_for(:update_content_table), new_schema.sql_for(:create_content_table, new_schema.schema[:fields].count))
+        # adjust shadow tables
+        @db.execute(new_schema.sql_for(:expand_data), changes[:extra_fields_count])
+        @db.execute(new_schema.sql_for(:expand_docsize), changes[:extra_fields_count])
+        @db.execute("PRAGMA WRITABLE_SCHEMA = RESET")
+        # need to reprepare statements
       end
+      if requires_trigger_change
+        @db.execute_batch(new_schema.sql_for(:drop_primary_triggers))
+        @db.execute_batch(new_schema.sql_for(:create_primary_triggers))
+        if (secondary_triggers_sql = new_schema.sql_for(:create_secondary_triggers))
+          @db.execute_batch(new_schema.sql_for(:drop_secondary_triggers))
+          @db.execute_batch(secondary_triggers_sql)
+        end
+      end
+      if changes[:fields] || changes[:table] || changes[:tokenizer] || changes[:weights] || changes[:filter_column]
+        @schema = new_schema
+        set_config_value(:litesearch_schema, @schema.schema)
+        prepare_statements
+        # save_schema
+      end
+      # update the weights if they changed
+      @db.execute(@schema.sql_for(:ranks, true)) if changes[:weights]
+      @db.execute_batch(@schema.sql_for(:create_vocab_tables))
+      do_rebuild if requires_rebuild
     end
-    if changes[:fields] || changes[:table] || changes[:tokenizer] || changes[:weights] || changes[:filter_column]
-      @schema = new_schema
-      set_config_value(:litesearch_schema, @schema.schema)
-      prepare_statements
-      # save_schema
+
+    if destructive
+      with_destructive_protection!("modify") { apply_modify.call }
+    else
+      apply_modify.call
     end
-    # update the weights if they changed
-    @db.execute(@schema.sql_for(:ranks, true)) if changes[:weights]
-    @db.execute_batch(@schema.sql_for(:create_vocab_tables))
-    do_rebuild if requires_rebuild
   end
 
   def do_rebuild
@@ -249,6 +266,30 @@ class Litesearch::Index
     @db.execute_batch(@schema.sql_for(:create_vocab_tables))
     set_config_value(:litesearch_schema, @schema.schema)
     @db.execute(@schema.sql_for(:ranks, true))
+  end
+
+  # Shared protection boundary for WRITABLE_SCHEMA / rebuild / drop-style mutations.
+  def with_destructive_protection!(label)
+    path = db_file_path
+    migrator = Litestack::SchemaMigrator.new(
+      @db,
+      path: path,
+      sql_definition: {"schema" => {1 => {"noop" => "SELECT 1"}}, "stmts" => {}},
+      component: "Litesearch::Index"
+    )
+    migrator.with_destructive_protection!(label: label) do
+      yield
+    end
+  ensure
+    @last_migration_backup = migrator&.backup_path
+  end
+
+  def db_file_path
+    if @db.respond_to?(:filename)
+      name = @db.filename.to_s
+      return name unless name.empty? || name == ":memory:"
+    end
+    ":memory:"
   end
 
   def get_config_value(key)

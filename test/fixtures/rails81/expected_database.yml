@@ -1,0 +1,4 @@
+# Required generator postconditions (asserted by install generator tests / app smoke)
+# - adapter: litedb for application databases
+# - idle_timeout: 0 recommended for SQLite page cache
+# Multi-database unrelated entries must be preserved.

@@ -1,0 +1,3 @@
+# Required generator postconditions for Action Cable
+# development/production: adapter: litecable
+# test: adapter: test (or litecable)

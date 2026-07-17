@@ -4,7 +4,6 @@ require "minitest/autorun"
 require "active_record"
 require "active_record/base"
 
-require_relative "patch_ar_adapter_path"
 
 require_relative "../lib/active_record/connection_adapters/litedb_adapter"
 
@@ -138,8 +137,43 @@ class Post < ApplicationRecord
 end
 
 class TestActiveRecordLitesearch < Minitest::Test
+  def ensure_ar_search_schema!
+    ActiveRecord::Base.establish_connection(adapter: "litedb", database: ":memory:")
+    db = ActiveRecord::Base.connection.raw_connection
+    tables = db.execute("SELECT name FROM sqlite_master WHERE type='table'").flatten
+    unless tables.include?("books")
+      db.execute("CREATE TABLE authors(id INTEGER PRIMARY KEY, name TEXT, created_at TEXT, updated_at TEXT)")
+      db.execute("CREATE TABLE publishers(id INTEGER PRIMARY KEY, name TEXT, created_at TEXT, updated_at TEXT)")
+      db.execute("CREATE TABLE books(id INTEGER PRIMARY KEY, title TEXT, description TEXT, published_on TEXT, author_id INTEGER, publisher_id INTEGER, state TEXT, created_at TEXT, updated_at TEXT, active INTEGER)")
+      db.execute("CREATE TABLE reviews(id INTEGER PRIMARY KEY, book_id INTEGER)")
+      db.execute("CREATE TABLE comments(id INTEGER PRIMARY KEY, review_id INTEGER)")
+      db.execute("CREATE TABLE rich_texts(id INTEGER PRIMARY KEY, body TEXT, record_id INTEGER, record_type TEXT, created_at TEXT, updated_at TEXT) ")
+      db.execute("CREATE TABLE users(user_id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), name TEXT, created_at TEXT, updated_at TEXT)")
+      db.execute("CREATE TABLE posts(post_id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), author_id TEXT, title TEXT, content TEXT, created_at TEXT, updated_at TEXT)")
+    end
+
+    # Re-bind search indexes to the current connection (indexes are connection-local).
+    Author.litesearch { |schema| schema.field :name }
+    User.litesearch do |schema|
+      schema.fields %w[name]
+      schema.primary_key :user_id
+    end
+    Post.litesearch do |schema|
+      schema.fields %w[title content]
+      schema.field :author, target: "users.name", primary_key: :user_id
+      schema.primary_key :post_id
+    end
+    Review.litesearch do |schema|
+      schema.field :body, target: "rich_texts.body", as: :record
+    end
+    Comment.litesearch do |schema|
+      schema.field :body, rich_text: true
+    end
+  end
+
   def setup
-    Book.drop_index!
+    ensure_ar_search_schema!
+    Book.drop_index! rescue nil
     Book.delete_all
     Author.delete_all
     Publisher.delete_all

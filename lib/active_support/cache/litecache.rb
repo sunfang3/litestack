@@ -1,3 +1,8 @@
+# frozen_string_literal: true
+
+require_relative "../../litestack/compatibility"
+Litestack::Compatibility.assert_rails_supported!
+
 require "active_support"
 require "active_support/core_ext/numeric/time"
 require "active_support/cache"
@@ -6,11 +11,7 @@ require_relative "../../litestack/litecache"
 
 module ActiveSupport
   module Cache
-    self.format_version = 7.0
-
     class Litecache < Store
-      # prepend Strategy::LocalCache
-
       def self.supports_cache_versioning?
         true
       end
@@ -18,7 +19,8 @@ module ActiveSupport
       def initialize(options = {})
         super
         @options[:return_full_record] = true
-        @cache = ::Litecache.new(@options) # reachout to the outer litecache class
+        # Do NOT mutate ActiveSupport::Cache.format_version — use the host app's coder.
+        @cache = ::Litecache.new(@options)
       end
 
       def increment(key, amount = 1, options = nil)
@@ -42,7 +44,9 @@ module ActiveSupport
         @cache.prune(limit)
       end
 
-      def cleanup(limit = nil, time = nil)
+      # Match ActiveSupport::Cache::Store public signature: cleanup(options = nil)
+      def cleanup(options = nil)
+        limit = options.is_a?(Hash) ? options[:limit] : options
         @cache.prune(limit)
       end
 
@@ -66,26 +70,30 @@ module ActiveSupport
         @cache.stats
       end
 
+      def close
+        @cache.close
+      end
+
       private
-
-      def serialize_entries(entry, **options)
-        Marshal.dump(entry)
-      end
-
-      def deserialize_entries(entry)
-        Marshal.load(entry.to_s)
-      end
 
       # Read an entry from the cache.
       def read_entry(key, **options)
         deserialize_entry(@cache.get(key))
+      rescue TypeError, ArgumentError
+        # Corrupt payload treated as miss
+        nil
       end
 
       def read_multi_entries(names, **options)
         results = {}
-        return results if names == []
+        return results if names == [] || names.nil?
         rs = @cache.get_multi(*names.flatten)
-        rs.each_pair { |k, v| results[k] = deserialize_entry(v).value }
+        rs.each_pair do |k, v|
+          entry = deserialize_entry(v)
+          results[k] = entry.value if entry
+        rescue TypeError, ArgumentError
+          # skip corrupt
+        end
         results
       end
 
@@ -95,18 +103,20 @@ module ActiveSupport
       end
 
       def write_multi_entries(entries, **options)
-        return if entries.empty?
-        entries.each_pair { |k, v| entries[k] = serialize_entry(v, **options) }
+        return if entries.nil? || entries.empty?
+        # Do not mutate caller input
+        serialized = {}
+        entries.each_pair { |k, v| serialized[k] = serialize_entry(v, **options) }
         expires_in = options[:expires_in].to_i if options[:expires_in]
-        if options[:race_condition_ttl] && expires_in > 0 && !options[:raw]
+        if options[:race_condition_ttl] && expires_in.to_i > 0 && !options[:raw]
           expires_in += 5.minutes
         end
-        @cache.set_multi(entries, expires_in)
+        @cache.set_multi(serialized, expires_in)
       end
 
       def write_serialized_entry(key, payload, **options)
         expires_in = options[:expires_in].to_i if options[:expires_in]
-        if options[:race_condition_ttl] && expires_in > 0 && !options[:raw]
+        if options[:race_condition_ttl] && expires_in.to_i > 0 && !options[:raw]
           expires_in += 5.minutes
         end
         if options[:unless_exist]

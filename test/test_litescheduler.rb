@@ -15,19 +15,20 @@ describe Litescheduler do
 
     it "when Fiber.scheduler present, returns an instance of the Fiber adapter" do
       Scheduler = Class.new do # standard:disable Lint/ConstantDefinitionInBlock
-        def block = nil
-
-        def unblock = nil
-
-        def kernel_sleep = nil
-
-        def io_wait = nil
+        def block(*, **) = nil
+        def unblock(*, **) = nil
+        def kernel_sleep(*, **) = nil
+        def io_wait(*, **) = nil
+        def fiber_interrupt(*, **) = nil
+        def fiber(&block) = Fiber.new(blocking: false, &block).tap(&:resume)
+        def yield = nil
       end
       Fiber.set_scheduler Scheduler.new
 
       assert_equal :fiber, Litescheduler.backend
 
       Fiber.set_scheduler nil
+      assert_equal :threaded, Litescheduler.backend
     end
 
     it "when Polyphony defined, returns an instance of the Polyphony adapter" do

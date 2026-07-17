@@ -52,16 +52,21 @@ class Litejobqueue < Litequeue
   alias_method :_push, :push
 
   # a method that returns a single instance of the job queue
-  # for use by Litejob
+  # for use by Litejob. Recreates the singleton if it was stopped/closed.
   def self.jobqueue(options = {})
-    @@queue ||= @@mutex.synchronize { new(options) }
+    @@mutex.synchronize do
+      if @@queue.nil? || (@@queue.respond_to?(:closed?) && @@queue.closed?) || @@queue.instance_variable_get(:@lifecycle_state) == :closed
+        @@queue = nil
+        q = allocate
+        q.send(:initialize, options)
+        @@queue = q
+      end
+      @@queue
+    end
   end
 
   def self.new(options = {})
-    return @@queue if @@queue
-    @@queue = allocate
-    @@queue.send(:initialize, options)
-    @@queue
+    jobqueue(options)
   end
 
   # create new queue instance (only once instance will be created in the process)
@@ -69,7 +74,7 @@ class Litejobqueue < Litequeue
   #
   def initialize(options = {})
     @queues = [] # a place holder to allow workers to process
-    super(options)
+    super
 
     # group and order queues according to their priority
     pgroups = {}
@@ -118,7 +123,7 @@ class Litejobqueue < Litequeue
   #   id = jobqueue.push(EasyJob, params, 10) # queue for processing in 10 seconds
   #   jobqueue.delete(id)
   def delete(id)
-    job = super(id)
+    job = super
     @logger.info("[litejob]:[DEL] job: #{job}")
     job = Oj.load(job[0], symbol_keys: true) if job
     job
@@ -134,14 +139,35 @@ class Litejobqueue < Litequeue
   # specifically useful for testing
   def stop
     @running = false
-    # @@queue = nil
+    @stopping = true
     close
+  end
+
+  def stopping?
+    !!@stopping || !@running
+  end
+
+  # Reset the process-wide singleton (tests / forked children only).
+  def self.reset_singleton!
+    @@mutex.synchronize do
+      if @@queue
+        begin
+          @@queue.instance_variable_set(:@running, false)
+          @@queue.instance_variable_set(:@stopping, true)
+          @@queue.instance_variable_set(:@lifecycle_state, :closed)
+          @@queue.instance_variable_set(:@exit_callback_disarmed, true)
+        rescue
+          nil
+        end
+      end
+      @@queue = nil
+    end
   end
 
   private
 
   def prepare_search_options(opts)
-    sql_opts = super(opts)
+    sql_opts = super
     sql_opts[:klass] = opts[:klass]
     sql_opts[:params] = opts[:params]
     sql_opts
@@ -149,23 +175,24 @@ class Litejobqueue < Litequeue
 
   def exit_callback
     @running = false # stop all workers
-    if @jobs_in_flight > 0
-      puts "--- Litejob detected an exit, cleaning up"
+    @stopping = true
+    if @jobs_in_flight.to_i > 0
+      @logger&.info { "[litejob] exit with #{@jobs_in_flight} jobs in flight; draining" }
       index = 0
       while @jobs_in_flight > 0 && index < 30 # 3 seconds grace period for jobs to finish
-        puts "--- Waiting for #{@jobs_in_flight} jobs to finish"
         sleep 0.1
         index += 1
       end
-      puts " --- Exiting with #{@jobs_in_flight} jobs in flight"
     end
+    close
   end
 
   def setup
     super
     @jobs_in_flight = 0
-    @workers = @options[:workers].times.collect { create_worker }
-    @gc = create_garbage_collector
+    @stopping = false
+    @workers = @options[:workers].times.collect { |i| track_worker(create_worker) }
+    @gc = track_worker(create_garbage_collector)
     @mutex = Litescheduler::Mutex.new # reinitialize a mutex in setup as the environment could change after forking
   end
 
@@ -190,6 +217,7 @@ class Litejobqueue < Litequeue
   def create_worker
     # temporarily stop this feature until a better solution is implemented
     # return if defined?(Rails) && !defined?(Rails::Server)
+    waiter = track_waiter
     Litescheduler.spawn do
       worker_sleep_index = 0
       while @running
@@ -211,7 +239,7 @@ class Litejobqueue < Litequeue
           end
         end
         if processed == 0
-          sleep @options[:sleep_intervals][worker_sleep_index]
+          waiter.sleep(@options[:sleep_intervals][worker_sleep_index])
           worker_sleep_index += 1 if worker_sleep_index < (@options[:sleep_intervals].length - 1)
         else
           worker_sleep_index = 0 # reset the index
@@ -222,6 +250,7 @@ class Litejobqueue < Litequeue
 
   # create a gc for dead jobs
   def create_garbage_collector
+    waiter = track_waiter
     Litescheduler.spawn do
       while @running
         while (jobs = pop("_dead", 100))
@@ -231,7 +260,7 @@ class Litejobqueue < Litequeue
             @logger.info "[litejob]:[DEL] garbage collector deleted 1 dead job"
           end
         end
-        sleep @options[:gc_sleep_interval]
+        waiter.sleep(@options[:gc_sleep_interval])
       end
     end
   end

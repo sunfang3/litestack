@@ -1,60 +1,56 @@
-# frozen_stringe_literal: true
+# frozen_string_literal: true
 
 module Litescheduler
-  # cache the scheduler we are running in
-  # it is an error to change the scheduler for a process
-  # or for a child forked from that process
+  # Detect scheduler from the *current* thread/state — never a process-global cache
+  # that can go stale after Fiber.scheduler set/unset or after fork (Ruby clears
+  # the scheduler in the child).
   def self.backend
-    @backend ||= if Fiber.scheduler
+    if Fiber.scheduler
       :fiber
-    elsif defined? Polyphony
+    elsif defined?(Polyphony)
       :polyphony
-    elsif defined? Iodine
+    elsif defined?(Iodine)
       :iodine
     else
       :threaded
     end
   end
 
-  # spawn a new execution context
+  # Kept for tests that clear state between cases.
+  def self.reset_backend!
+    # no-op: backend is no longer process-cached
+  end
+
+  # Spawn a new execution context; returns a waitable handle (Thread or FiberHandle).
   def self.spawn(&block)
-    if backend == :fiber
-      Fiber.schedule(&block)
-    elsif backend == :polyphony
-      spin(&block)
-    elsif (backend == :threaded) || (backend == :iodine)
+    case backend
+    when :fiber
+      FiberHandle.new(Fiber.schedule(&block))
+    when :polyphony
+      FiberHandle.new(spin(&block))
+    when :threaded, :iodine
       Thread.new(&block)
     end
-    # we should never reach here
   end
 
   def self.storage
-    if fiber_backed?
-      Fiber.current.storage
-    else
-      Thread.current
-    end
+    fiber_backed? ? Fiber.current.storage : Thread.current
   end
 
   def self.current
-    if fiber_backed?
-      Fiber.current
-    else
-      Thread.current
-    end
+    fiber_backed? ? Fiber.current : Thread.current
   end
 
-  # switch the execution context to allow others to run
   def self.switch
-    if backend == :fiber
+    case backend
+    when :fiber
       Fiber.scheduler.yield
       true
-    elsif backend == :polyphony
+    when :polyphony
       Fiber.current.schedule
       Thread.current.switch_fiber
       true
     else
-      # Thread.pass
       false
     end
   end
@@ -65,16 +61,63 @@ module Litescheduler
 
   private_class_method :fiber_backed?
 
+  # Uniform wait/alive? surface for Thread and Fiber-backed workers.
+  class FiberHandle
+    def initialize(fiber)
+      @fiber = fiber
+    end
+
+    def alive?
+      @fiber.respond_to?(:alive?) ? @fiber.alive? : false
+    end
+
+    def join(_timeout = nil)
+      # Fiber workers exit when their loop ends; nothing to join.
+      nil
+    end
+
+    def kill
+      # Best-effort: fibers cannot be forcibly killed like threads.
+      nil
+    end
+  end
+
   class Mutex
     def initialize
       @mutex = Thread::Mutex.new
     end
 
     def synchronize(&block)
-      if Litescheduler.backend == :threaded || Litescheduler.backend == :iodine
-        @mutex.synchronize { block.call }
-      else
-        block.call
+      # Always use a real mutex; Fiber scheduler hooks handle contention under fibers.
+      @mutex.synchronize { block.call }
+    end
+  end
+
+  # Interruptible sleeper: workers sleep until duration elapses or wake is signaled.
+  class Waiter
+    def initialize
+      @mutex = Thread::Mutex.new
+      @cv = Thread::ConditionVariable.new
+      @woken = false
+    end
+
+    def sleep(duration)
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + duration.to_f
+      @mutex.synchronize do
+        @woken = false
+        loop do
+          remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          break if remaining <= 0 || @woken
+          @cv.wait(@mutex, remaining)
+        end
+        @woken
+      end
+    end
+
+    def wake!
+      @mutex.synchronize do
+        @woken = true
+        @cv.broadcast
       end
     end
   end
@@ -85,7 +128,17 @@ module Litescheduler
     end
 
     def self.listen(&block)
-      listeners << block
+      token = block
+      listeners << token
+      token
+    end
+
+    def self.unlisten(token)
+      listeners.delete(token)
+    end
+
+    def self.clear!
+      @listeners = []
     end
   end
 
@@ -94,6 +147,7 @@ module Litescheduler
       ppid = Process.pid
       result = super
       if Process.pid != ppid && [:threaded, :iodine].include?(Litescheduler.backend)
+        # Ruby clears Fiber.scheduler after fork; do not close app-owned schedulers.
         ForkListener.listeners.each { |l| l.call }
       end
       result
@@ -101,4 +155,4 @@ module Litescheduler
   end
 end
 
-Process.singleton_class.prepend(Litescheduler::Forkable)
+Process.singleton_class.prepend(Litescheduler::Forkable) unless Process.singleton_class.ancestors.include?(Litescheduler::Forkable)

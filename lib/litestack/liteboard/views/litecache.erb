@@ -1,3 +1,11 @@
+<section aria-labelledby="litecache-heading">
+  <h2 id="litecache-heading">Litecache</h2>
+  <% if @empty_state %>
+    <div class="lb-empty" role="status"><p><strong>No Litecache metrics yet.</strong> Enable metrics and generate cache traffic.</p></div>
+  <% end %>
+  <div class="lb-metric"><strong><%= format(round(@size)) %> MB / <%= format(round(@max_size)) %> MB</strong><span>size / max (<%= round(@full) %>% full)</span></div>
+  <div class="lb-metric"><strong><%= format(@entries) %></strong><span>entries</span></div>
+  <div class="lb-metric"><strong><%= format(@reads) %> / <%= format(@writes) %></strong><span>reads / writes</span></div>
 
   <div class = "row">
 

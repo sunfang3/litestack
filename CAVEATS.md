@@ -1,3 +1,5 @@
+# Caveats (Ruby 4 / Rails 8.1 / sqlite3 2.x)
+
 # CAVEATS
 
 This is a document that lists some caveats that you need to consider when dealing with Litestack and SQLite applications

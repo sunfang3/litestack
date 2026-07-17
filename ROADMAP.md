@@ -43,3 +43,7 @@ This is a list of functional/non-functional features that litestack targets to i
   - [ ] Restore generic module
   - [ ] Better HTML/CSS
 - [ ] Kredis replacement implementation?
+
+## Completed (1.0.0)
+
+- Ruby 4 + Rails 8.1 modernization, durable migrator, CI matrix, Liteboard security shell

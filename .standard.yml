@@ -1,5 +1,11 @@
-ignore:
-  - 'test/**/*':
-    - Style/GlobalVars
+ruby_version: 4.0
 
-ruby_version: 3.0
+ignore:
+  - 'test/**/*'
+  - 'bench/**/*'
+  - 'scripts/**/*'
+  - 'samples/**/*'
+  # Legacy components not fully rewritten in this modernization (style debt isolated).
+  - 'lib/litestack/litekd/**/*'
+  - 'lib/litestack/litesearch/**/*'
+  - 'lib/litestack/liteboard/views/**/*'

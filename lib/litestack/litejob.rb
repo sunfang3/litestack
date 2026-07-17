@@ -45,7 +45,6 @@ module Litejob
   end
 
   module ClassMethods
-
     def perform_async(*params) = get_jobqueue.push(name, params, 0, queue)
 
     def perform_at(time, *params) = get_jobqueue.push(name, params, time.to_i - Time.now.to_i, queue)
@@ -59,12 +58,12 @@ module Litejob
     def delete(id) = get_jobqueue.delete(id)
 
     def queue = @queue_name ||= "default"
-    
+
     def get_jobqueue = Litejobqueue.jobqueue(options)
-    
+
     def defer_litejob_start? = false
-    
-    def queue=(queue_name) 
+
+    def queue=(queue_name)
       @queue_name = queue_name.to_s
     end
 
@@ -75,6 +74,5 @@ module Litejob
         {}
       end
     end
-    
   end
 end

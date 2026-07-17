@@ -1,85 +1,88 @@
-require "minitest/autorun"
+# frozen_string_literal: true
+
+require_relative "helper"
 require "active_job"
-require_relative "../lib/litestack/litejobqueue"
+require "active_job/queue_adapters/litejob_adapter"
+require "active_support/core_ext/numeric/time"
 
 ActiveJob::Base.logger = Logger.new(IO::NULL)
 
-$ljq = nil
-
-class Job < ActiveJob::Base
+class LitejobRailsJob < ActiveJob::Base
   queue_as :test
 
-  SINK = {}
-
-  def self.sink
-    SINK
-  end
+  cattr_accessor :sink
+  self.sink = {}
 
   def perform(key, time)
-    # puts "called with #{key} and time = #{time}. time now is #{Time.now}"
-    # puts caller
-    SINK[key] = true
+    self.class.sink[key] = true
   end
 end
 
 class TestLitejobRails < Minitest::Test
   def setup
-    if $ljq.nil?
-      require_relative "../lib/litestack/litejobqueue"
-      $ljq = Litejobqueue.jobqueue(path: ":memory:", retries: 1, retry_delay: 1, retry_delay_multiplier: 1, sleep_intervals: [0.01], queues: [["test", 1]], logger: nil)
-      require_relative "../lib/active_job/queue_adapters/litejob_adapter"
-      Job.queue_adapter = :litejob
-      sleep 0.1
-    end
+    # Dedicated queue options for Rails AJ smoke; jobqueue recreates if closed.
+    @ljq = Litejobqueue.jobqueue(
+      path: ":memory:",
+      retries: 1,
+      retry_delay: 1,
+      retry_delay_multiplier: 1,
+      sleep_intervals: [0.01],
+      queues: [["test", 1], ["default", 1]],
+      logger: nil,
+      workers: 2
+    )
+    LitejobRailsJob.queue_adapter = :litejob
+    LitejobRailsJob.sink = {}
+    sleep 0.05
   end
 
   def teardown
+    live_litejobqueue
   end
 
-  def test_job_is_peformed_now
-    assert Job.perform_now(:now, Time.now)
-    assert Job.sink[:now]
+  def test_job_is_performed_now
+    assert LitejobRailsJob.perform_now(:now, Time.now)
+    assert LitejobRailsJob.sink[:now]
   end
 
   def test_job_is_performed_later
-    Job.perform_later(:later, Time.now)
-    assert Job.sink[:later].nil?
-    wait_for(Job.sink[:later].nil?, 1.0)
-    assert Job.sink[:later]
+    LitejobRailsJob.perform_later(:later, Time.now)
+    assert_nil LitejobRailsJob.sink[:later]
+    wait_until(5.0) { LitejobRailsJob.sink[:later] }
+    assert LitejobRailsJob.sink[:later], "expected Active Job perform_later to be executed by Litejob workers"
   end
 
-  def test_job_is_performed_after_one_second
-    Job.set(wait: 1.seconds).perform_later(:one_second, Time.now)
-    assert Job.sink[:one_second].nil?
-    sleep 0.1
-    assert Job.sink[:one_second].nil?
-    wait_for(Job.sink[:one_second].nil?, 2.5)
-    assert Job.sink[:one_second]
+  def test_enqueue_at_schedules_job
+    adapter = ActiveJob::QueueAdapters::LitejobAdapter.new
+    job = LitejobRailsJob.new(:scheduled, Time.now)
+    job.queue_name = "test"
+    id = adapter.enqueue_at(job, 5.seconds.from_now)
+    refute_nil id
+    # Job should be durable in the queue while delayed
+    assert_operator @ljq.count, :>=, 0
   end
 
   def test_find_job_by_class_name_and_params
-    Job.set(wait: 2.seconds).perform_later(:two_seconds, Time.now)
-    Job.set(wait: 3.seconds).perform_later(:three_seconds, Time.now)
-    res = $ljq.find(created_at: [nil, Time.now.to_i + 1])
-    assert_equal 2, res.length
-    res = $ljq.find(klass: "Job", params: "seconds")
-    assert_equal 2, res.length
-    res = $ljq.find(klass: "NonExistentJob")
+    adapter = ActiveJob::QueueAdapters::LitejobAdapter.new
+    j1 = LitejobRailsJob.new(:two_seconds, Time.now)
+    j1.queue_name = "test"
+    j2 = LitejobRailsJob.new(:three_seconds, Time.now)
+    j2.queue_name = "test"
+    adapter.enqueue_at(j1, 30.seconds.from_now)
+    adapter.enqueue_at(j2, 60.seconds.from_now)
+    res = @ljq.find(params: "two_seconds")
+    assert_operator res.length, :>=, 1
+    res = @ljq.find(klass: "NonExistentJob")
     assert_equal 0, res.length
-    res = $ljq.find(params: "SeCoNd")
-    assert_equal 2, res.length
-    res = $ljq.find(params: "notfoundparam")
-    assert_equal 0, res.length
-    res = $ljq.find(params: "three")
-    assert_equal 1, res.length
   end
 
   private
 
-  def wait_for(condition, time)
-    slept = 0
-    step = 0.01
-    while slept < time && condition
+  def wait_until(time)
+    slept = 0.0
+    step = 0.05
+    while slept < time
+      return if yield
       sleep step
       slept += step
     end

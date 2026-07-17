@@ -1,3 +1,5 @@
+<section aria-labelledby="litejob-heading"><h2 id="litejob-heading">Litejob</h2>
+<% if @empty_state %><div class="lb-empty" role="status"><p><strong>No Litejob metrics yet.</strong></p></div><% end %>
   <div class = "row">
 
     <div class = "col">
@@ -70,7 +72,7 @@
           Average processing time per job
         </div>
         <div class="card-body">
-          <h1><%=(@processing_time.to_f / @processed_count).truncate(4) rescue 0%> sec</h1>
+          <h1><%= @processed_count.to_i.zero? ? 0 : (@processing_time.to_f / @processed_count).truncate(4) %> sec</h1>
         </div>
       </div>
     </div>
@@ -149,3 +151,4 @@
   &nbsp;<br/>
   </div>
 
+</section>

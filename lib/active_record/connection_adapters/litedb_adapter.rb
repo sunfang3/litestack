@@ -1,3 +1,8 @@
+# frozen_string_literal: true
+
+require_relative "../../litestack/compatibility"
+Litestack::Compatibility.assert_rails_supported!
+
 require_relative "../../litestack/litedb"
 
 require "active_record"
@@ -5,54 +10,9 @@ require "active_record/connection_adapters/sqlite3_adapter"
 require "active_record/tasks/sqlite_database_tasks"
 
 module ActiveRecord
-  module ConnectionHandling # :nodoc:
-    def litedb_connection(config)
-      config = config.symbolize_keys
-
-      # Require database.
-      unless config[:database]
-        raise ArgumentError, "No database file specified. Missing argument: database"
-      end
-
-      # Allow database path relative to Rails.root, but only if the database
-      # path is not the special path that tells sqlite to build a database only
-      # in memory.
-      if config[:database] != ":memory:" && !config[:database].to_s.start_with?("file:")
-        config[:database] = File.expand_path(config[:database], Rails.root) if defined?(Rails.root)
-        dirname = File.dirname(config[:database])
-        Dir.mkdir(dirname) unless File.directory?(dirname)
-      end
-
-      db = ::Litedb.new(
-        config[:database].to_s,
-        config.merge(results_as_hash: true)
-      )
-
-      ConnectionAdapters::LitedbAdapter.new(db, logger, nil, config)
-    rescue Errno::ENOENT => error
-      if error.message.include?("No such file or directory")
-        raise ActiveRecord::NoDatabaseError
-      else
-        raise
-      end
-    end
-  end
-
   module ConnectionAdapters # :nodoc:
     class LitedbAdapter < SQLite3Adapter
-      ADAPTER_NAME = "litedb"
-
-      class << self
-        def dbconsole(config, options = {})
-          args = []
-
-          args << "-#{options[:mode]}" if options[:mode]
-          args << "-header" if options[:header]
-          args << File.expand_path(config.database, Rails.respond_to?(:root) ? Rails.root : nil)
-
-          find_cmd_and_exec("sqlite3", *args)
-        end
-      end
+      ADAPTER_NAME = "Litedb"
 
       NATIVE_DATABASE_TYPES = {
         primary_key: "integer PRIMARY KEY NOT NULL",
@@ -68,16 +28,56 @@ module ActiveRecord
         boolean: {name: "integer"},
         json: {name: "text"},
         unixtime: {name: "integer"}
-      }
+      }.freeze
 
-      private
+      class << self
+        # Rails 8.1 inherited connect calls self.class.new_client(@connection_parameters).
+        def new_client(config)
+          config = config.symbolize_keys
+          unless config[:database]
+            raise ArgumentError, "No database file specified. Missing argument: database"
+          end
 
-      def connect
-        @raw_connection = ::Litedb.new(
-          @config[:database].to_s,
-          @config.merge(results_as_hash: true)
-        )
-        configure_connection
+          if config[:database] != ":memory:" && !config[:database].to_s.start_with?("file:")
+            config[:database] = File.expand_path(config[:database], Rails.root) if defined?(Rails.root)
+            dirname = File.dirname(config[:database])
+            Dir.mkdir(dirname) unless File.directory?(dirname)
+          end
+
+          ::Litedb.new(
+            config[:database].to_s,
+            config.merge(results_as_hash: true)
+          )
+        rescue Errno::ENOENT => error
+          if error.message.include?("No such file or directory")
+            raise ActiveRecord::NoDatabaseError
+          else
+            raise
+          end
+        end
+
+        def dbconsole(config, options = {})
+          args = []
+          args << "-#{options[:mode]}" if options[:mode]
+          args << "-header" if options[:header]
+          root = Rails.respond_to?(:root) ? Rails.root : nil
+          db_path = config.respond_to?(:database) ? config.database : config[:database]
+          args << File.expand_path(db_path.to_s, root)
+          find_cmd_and_exec("sqlite3", *args)
+        end
+
+        # Lexically override so we never inherit SQLite3Adapter's constant mapping.
+        def native_database_types
+          NATIVE_DATABASE_TYPES
+        end
+      end
+
+      def adapter_name
+        "litedb"
+      end
+
+      def native_database_types
+        self.class.native_database_types
       end
     end
   end

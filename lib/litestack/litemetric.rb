@@ -128,6 +128,21 @@ class Litemetric
     run_stmt(:delete_events, "day", RESOLUTIONS[:week] * 1)
   end
 
+  def close(timeout: shutdown_timeout)
+    @running = false
+    begin
+      @collector&.flush if @collector && !@collector.closed?
+    rescue => e
+      @logger&.warn { "[litemetric] flush on close: #{e.class}: #{e.message}" }
+    end
+    begin
+      @collector&.close
+    rescue
+      nil
+    end
+    super
+  end
+
   ## background stuff
   ###################
 
@@ -149,10 +164,11 @@ class Litemetric
 
   def exit_callback
     @running = false
-    if @collector.count > 0
-      warn "--- Litemetric detected an exit, flushing metrics"
+    if @collector && !@collector.closed? && @collector.count > 0
+      @logger&.info { "[litemetric] exit: flushing metrics" }
       @collector.flush
     end
+    close
   end
 
   def setup
@@ -161,8 +177,8 @@ class Litemetric
     @registered = {}
     @mutex = Litescheduler::Mutex.new
     @collector = Litemetric::Collector.new({dbpath: @options[:path]})
-    @summarizer = create_summarizer
-    @flusher = create_flusher
+    @summarizer = track_worker(create_summarizer)
+    @flusher = track_worker(create_flusher)
   end
 
   def create_connection
@@ -172,19 +188,31 @@ class Litemetric
   end
 
   def create_flusher
+    waiter = track_waiter
     Litescheduler.spawn do
       while @running
-        sleep @options[:flush_interval]
-        @collector.flush
+        waiter.sleep(@options[:flush_interval])
+        break unless @running
+        begin
+          @collector.flush
+        rescue Litestack::ClosedError
+          break
+        end
       end
     end
   end
 
   def create_summarizer
+    waiter = track_waiter
     Litescheduler.spawn do
       while @running
-        sleep @options[:summarize_interval]
-        summarize
+        waiter.sleep(@options[:summarize_interval])
+        break unless @running
+        begin
+          summarize
+        rescue Litestack::ClosedError
+          break
+        end
       end
     end
   end

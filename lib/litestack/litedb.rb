@@ -18,12 +18,12 @@ class Litedb < ::SQLite3::Database
   # override the original initilaizer to allow for connection configuration
   def initialize(file, options = {}, zfs = nil)
     if block_given?
-      super(file, options, zfs) do |db|
+      super do |db|
         init unless options[:noinit] == true
         yield db
       end
     else
-      super(file, options, zfs)
+      super
       init unless options[:noinit] == true
     end
     @running = true
@@ -41,7 +41,7 @@ class Litedb < ::SQLite3::Database
 
   # enforce immediate mode to avoid deadlocks for a small performance penalty
   def transaction(mode = :immediate)
-    super(mode)
+    super
   end
 
   # return the size of the database file
@@ -132,7 +132,7 @@ class Litedb::Statement < SQLite3::Statement
   attr_accessor :sql
 
   def initialize(db, sql)
-    super(db, sql)
+    super
     collect_metrics if db.collecting_metrics?
   end
 

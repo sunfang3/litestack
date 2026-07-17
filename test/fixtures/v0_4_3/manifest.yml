@@ -1,0 +1,25 @@
+---
+source: litestack 0.4.3 (RubyGems) on Ruby 4.0.5 with logger shim
+ruby: 4.0.5
+sqlite3: 2.9.5
+created_at: '2026-07-17T09:45:15Z'
+expectations:
+  litedb:
+    people_count: 2
+    names:
+    - alice
+    - bob
+  litejob:
+    min_jobs: 1
+  litesearch:
+    docs_count: 1
+  litekd:
+    has_greeting: true
+  litemetric:
+    has_topic: FixtureTopic
+checksums_sha256:
+  litedb: 7fe80c24ffa66d7149d26cf54fb8763e1f4dcd625142ead10a91ccb56074e4fc
+  litejob: 9c88e2c0b25e04854061a1b0b7c6755fb09b969bbe3384bcec57d1d2af6c0cb1
+  litesearch: a914c1c35e44ec95ef18c4fe85f4c2c28912afebc8f24b8aa4ba41bb3a014896
+  litekd: 6288d5d5eee200d2eeeba50fed4a384e3af3aeef68be4f98297e9ad40906cd8e
+  litemetric: 90f51226a212c42aedc5a0663787d4d077be95f2b3aed62286aa85a2a1bd0034

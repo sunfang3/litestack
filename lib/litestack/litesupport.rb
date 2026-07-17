@@ -1,14 +1,17 @@
-# frozen_stringe_literal: true
+# frozen_string_literal: true
 
 require "sqlite3"
 require "logger"
 require "oj"
 require "yaml"
-require "pathname"
+require "pathname" # standard:disable Lint/RedundantRequireStatement
 require "fileutils"
 require "erb"
+require "base64" # standard:disable Lint/RedundantRequireStatement
+require "bigdecimal" # standard:disable Lint/RedundantRequireStatement
 
 require_relative "litescheduler"
+require_relative "schema_migrator"
 require_relative "liteconnection"
 
 module Litesupport
@@ -59,22 +62,83 @@ module Litesupport
       @count = count
       @block = block
       @resources = Thread::Queue.new
-      @mutex = Litescheduler::Mutex.new
+      @mutex = Thread::Mutex.new
+      @closed = false
+      @in_flight = 0
+      @all = []
       @count.times do
         resource = @mutex.synchronize { block.call }
+        @all << resource
         @resources << resource
       end
     end
 
+    def closed?
+      @closed
+    end
+
+    def size
+      @count
+    end
+
+    # Drain every pooled resource (including in-flight after lease return) and close them.
+    def close
+      return if @closed
+      @closed = true
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 5.0
+      # Wait briefly for in-flight acquires to finish
+      while @in_flight > 0 && Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
+        sleep 0.01
+      end
+      closed_ids = {}
+      loop do
+        begin
+          resource = @resources.pop(true)
+        rescue ThreadError
+          break
+        end
+        next if closed_ids[resource.object_id]
+        close_resource(resource)
+        closed_ids[resource.object_id] = true
+      end
+      # Close any tracked resources not returned to the queue
+      @all.each do |resource|
+        next if closed_ids[resource.object_id]
+        close_resource(resource)
+        closed_ids[resource.object_id] = true
+      end
+    end
+
     def acquire
+      raise Litestack::ClosedError, "connection pool is closed" if @closed
       result = nil
       resource = @resources.pop
+      @mutex.synchronize { @in_flight += 1 }
       begin
+        raise Litestack::ClosedError, "connection pool is closed" if @closed
         result = yield resource
       ensure
-        @resources << resource
+        @mutex.synchronize { @in_flight -= 1 }
+        @resources << resource unless @closed
       end
       result
+    end
+
+    private
+
+    def close_resource(resource)
+      return unless resource
+      if resource.respond_to?(:stmts) && resource.stmts
+        resource.stmts.each_value do |stmt|
+          stmt.close if stmt && !(stmt.respond_to?(:closed?) && stmt.closed?)
+        rescue
+          nil
+        end
+        resource.stmts.clear if resource.stmts.respond_to?(:clear)
+      end
+      resource.close if resource.respond_to?(:close) && !(resource.respond_to?(:closed?) && resource.closed?)
+    rescue
+      nil
     end
   end
 end

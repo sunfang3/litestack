@@ -1,11 +1,28 @@
 ## [Unreleased]
 
-- [View Diff](https://github.com/oldmoe/litestack/compare/v0.4.3...master)
+## [1.0.0] - 2026-07-17
+
+- **Breaking:** Require Ruby `>= 4.0`; drop Ruby 3.x support.
+- **Breaking:** Rails integrations require Rails `>= 8.1, < 9` (Rails 7.x / 8.0 unsupported). Raises `Litestack::UnsupportedFrameworkVersionError` at adapter/Railtie entry points. Rails remains optional at gem runtime.
+- Modernize Active Record Litedb adapter for Rails 8.1 registered-adapter path; remove connection-handler test monkey patches and copied dbconsole patch.
+- Align Litecache Active Support store (no global `format_version` mutation), Litejob Active Job adapter (`AbstractAdapter`, `stopping?`, queue-safe enqueue), and Litecable Action Cable subscription adapter.
+- Idempotent connection/worker/scheduler/`at_exit` lifecycle; named `ClosedError` / `ShutdownTimeoutError`.
+- Central `SchemaMigrator` with advisory + write locks, WAL-consistent verified backups before destructive upgrades, transactional steps, and failure recovery.
+- Durable upgrade fixtures and tests for published 0.4.3 and pre-modernization 0.4.5 (`e598e1b`).
+- Liteboard: Rack 3 responses, security headers, CSP, local CSS/JS (no remote CDN/`eval`), empty/error routes, accessible landmarks.
+- Install generator: safer idempotent edits; never auto-deletes Solid Cache/Queue; prints optional cleanup guidance.
+- CI matrix: Ruby 4.0.0+Rails 8.1.0, Ruby 4.0.5+Rails 8.1.3, latest Ruby 4.x+Rails 8.x; package verification; non-blocking head.
+- Coverage harness starts before project load; sqlite3 runtime constrained to 2.x; version 1.0.0 metadata consistency.
+- Migration guide: `docs/MIGRATING_TO_RUBY4_RAILS81.md`
+
+### Carried from pre-1.0 master
+
 - Fix a table not defined bug for Litesearch
 - Add conditional mapping of external fields to Litesearch (backed index)
 - As a consequence of the above, support AR polymorphic associations
 - As a consequence of the above, support indexing and searching for ActionText attributes
 - Remove 'hanami-router' as a dependency, rely on vanilla Rack for Liteboard 
+
 
 ## [0.4.3] - 2024-02-15
 

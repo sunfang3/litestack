@@ -1,303 +1,56 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>liteboard</title>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.0/jquery.min.js"></script>
-    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Antonio">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">    
-    <style>
-      body {background-color: #fff}
-      input, select { border-radius: 3px}
-      div#header { width: 100%; border-bottom: 1px solid #089;}
-      div.label {max-width:400px;overflow:hidden}
-      h1 { font-family: antonio }
-      #content{ padding-right: 12px; padding-left: 12px; padding-bottom: 60px;}
-      table.head { margin-top: 12px; margin-bottom:12px}
-      select { color: #078; background-color: #fff; font-weight: normal }
-      .table th { color: #078; font-weight: normal; }
-      .table th.sorted { font-weight: bold }
-      .table td { color: #444; vertical-align:middle; font-size: 18px}
-      .table td:first-child { color: #444; vertical-align:middle; font-size: 15px; font-weight:normal}
-      .table td.empty { text-align:center}
-      a, a.nav-link { color: #078; }
-      .nav-pills .nav-link.active { color: #fff; background-color: #078}
-      a .logo { color: #000;}
-      a:visited { color: #078; }
-      .hidden { display: none}
-      div#search {margin-bottom: 8px}
-      div#footer {position:fixed; left:0px; height: 40px; width:100%; background-color:#0891; border-top: #0893 1px solid; padding: 8px; bottom: 0; text-align: right}
-      .logo{font-family: antonio}
-      .logo-half{ color: #078 }
-      .smaller { font-size: 24px; font-weight: normal}
-      .token {background-color: #ed9}
-      svg > g > g.google-visualization-tooltip { pointer-events : none }
-      .material-icons { vertical-align: middle}
-    </style>
+    <link rel="stylesheet" href="/assets/liteboard.css">
+    <script src="/assets/liteboard.js" defer></script>
   </head>
   <body>
-    <div id="content">
-    <div id="header">
-      <h1><span class="logo"><span class="logo-half">lite</span>board | </span> <span class="logo smaller">the <span class="logo-half">lite</span>metric dashboard</span></span></h1>
-    </div>
-    <div class="container">
-      <div class = "row">
-      &nbsp;<br/>
-      </div>
-      <div class="row">
-        <div class="col">
-          <nav class="navbar bg-body-tertiary">
-          <div>&nbsp;&nbsp;Showing data for the last <select onchange="window.location = locationWithParam('res', this.value)">
-            <%= mapping = {'hour' => '60 minutes', 'day' => '24 hours', 'week' => '7 days', 'year' => '52 weeks'}%>
-            <% ['hour', 'day', 'week', 'year'].each do  |res| %>
-              <option value=<%=res%> <%='selected' if res == @res%>><%=mapping[res]%></option>
-            <% end %>
-          </select></div>
-          </nav>
+    <header class="lb-header" role="banner">
+      <h1>
+        <span class="lb-logo"><span class="lb-logo-half">lite</span>board</span>
+        <span class="lb-logo" style="font-weight:normal;font-size:1rem"> — the <span class="lb-logo-half">lite</span>metric dashboard</span>
+      </h1>
+    </header>
+
+    <div class="lb-shell">
+      <nav class="lb-nav" aria-label="Topics">
+        <ul>
+          <li>
+            <a href="<%= index_url %>" <%= 'aria-current="page"' unless @topic %>>Home</a>
+          </li>
+          <% Array(@topics).each do |topic| %>
+            <li>
+              <a href="<%= topic_url(topic[0]) %>" <%= 'aria-current="page"' if @topic == topic[0] %>><%= h(topic[0]) %></a>
+            </li>
+          <% end %>
+        </ul>
+      </nav>
+
+      <main class="lb-main" id="main" role="main">
+        <div class="lb-controls">
+          <label for="res-select">Showing data for the last
+            <select id="res-select" name="res" onchange="window.location = locationWithParam('res', this.value)">
+              <% mapping = {"hour" => "60 minutes", "day" => "24 hours", "week" => "7 days", "year" => "52 weeks"} %>
+              <% ["hour", "day", "week", "year"].each do |res| %>
+                <option value="<%= res %>" <%= "selected" if res == @res %>><%= mapping[res] %></option>
+              <% end %>
+            </select>
+          </label>
         </div>
-      </div>
-      <div class = "row">
-      &nbsp;<br/>
-      </div>
-    <%= yield %>
 
+        <noscript>
+          <p class="noscript-note">JavaScript is disabled. Tables and metrics below remain fully readable.</p>
+        </noscript>
+
+        <%= yield %>
+      </main>
     </div>
-    
-<div class="container" style="position: fixed; left:0px; top: 145px">
-  <div class="row justify-content-center">
-    <div class="col">
-      <div class="card" style="width: 15rem;">
-        <div class="card-body">
-          <ul class="nav nav-pills nav-fill flex-column list-group list-group-flush">
-            <li class="list-group-item"><a class="nav-link <%='active' unless @topic%>" href="<%=index_url%>">Home</a></li>
-            <%@topics.each do |topic|%>
-            <li class="list-group-item"><a class="nav-link <%='active' if @topic == topic[0]%>" href="<%=topic_url(topic[0])%>"><%=topic[0]%></a></li>
-            <%end%>
-          </ul>
-      </div>
-    </div>
-    </div>
-  </div>
-</div>
-    
-    </div>
-    <div id="footer">
-      Powered by <a href="https://www.github.com/oldmoe/litestack" target="_blank"><span class="logo"><span class="logo-half">lite</span>stack</span></a>
-    </div>
-      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz"   crossorigin="anonymous"></script>
+
+    <footer class="lb-footer" role="contentinfo">
+      <span>Litestack Liteboard</span>
+    </footer>
   </body>
-    <script>
-      google.charts.load('current', {'packages':['corechart', 'bar']});
-
-      google.charts.setOnLoadCallback(drawMiniColumnChart);
-      google.charts.setOnLoadCallback(drawColumnChart);
-      google.charts.setOnLoadCallback(drawPieChart);
-      google.charts.setOnLoadCallback(drawStackedColumnChart);
-
-
-      function drawMiniColumnChart() {
-        elements = document.querySelectorAll(".inlineminicolumn")
-        elements.forEach(element => {
-          var label = element.dataset.label;
-          var mydata = eval(element.innerText)
-          element.innerText = ''
-          element.classList.remove("hidden")      
-          if(mydata.length > 1) {        
-            mydata.forEach(row => {
-              if(mydata[0].length == 5){ // we are doing custom tooltips
-                if(row[0] != "Time"){
-                  row[1] = Number(row[1].toPrecision(4))
-                  row[3] = Number(row[2].toPrecision(4))
-                  row[2] = row[0]+': '+mydata[0][1]+' '+row[1]
-                  row[4] = row[0]+': '+mydata[0][3]+' '+row[3]
-                }
-              }
-            })
-            var data = google.visualization.arrayToDataTable(
-              mydata
-            )
-            var options = {
-              animation: {'startup': true, 'duration': 300},
-              width: 300,
-              height: 70,
-              chartArea: {width:'100%', height: '100%'},              
-              backgroundColor: 'none',
-              bar: {groupWidth: "61.8%"},
-              colors : ['#089', 'silver' ],
-              vAxis: {'gridlines': {'count' : 0}, 'textPosition' : 'none', 'baselineColor' : 'none'},
-              hAxis: { 'count' : 0, 'textPosition' : 'none', 'baselineColor' : 'none'},
-              legend: {'position': 'none'},
-              tooltip: {showColorCode: true, isHtml: true},
-              isStacked: true
-            }
-            var chart = new google.visualization.ColumnChart(element);
-            chart.draw(data, options);   
-          }
-        })
-      }
-
-      function drawColumnChart() {
-        elements = document.querySelectorAll(".inlinecolumn")
-        elements.forEach(element => {
-          var label = element.dataset.label;
-          var mydata = eval(element.innerText)
-          element.innerText = ''
-          element.classList.remove("hidden")      
-          if(mydata.length > 1) {        
-            mydata.forEach(row => {
-              if(mydata[0].length == 5){ // we are doing custom tooltips
-                if(row[0] != "Time"){
-                  row[1] = Number(row[1].toPrecision(4))
-                  row[3] = Number(row[2].toPrecision(4))
-                  row[2] = row[0]+': '+mydata[0][1]+' '+row[1]
-                  row[4] = row[0]+': '+mydata[0][3]+' '+row[3]
-                }
-              }
-            })
-            var data = google.visualization.arrayToDataTable(
-              mydata
-            )
-            var options = {
-              animation: {'startup': true, 'duration': 300},
-              width: 550,
-              height: 350,
-              chartArea: {width:'100%', height: '80%'},              
-              backgroundColor: 'none',
-              bar: {groupWidth: "61.8%"},
-              colors : ['#089', 'silver' ],
-              vAxis: {'gridlines': {'count' : 0}, 'textPosition' : 'none', 'baselineColor' : 'none'},
-              hAxis: { 'count' : 0, 'textPosition' : 'none', 'baselineColor' : 'none'},
-              legend: {'position': 'bottom'},
-              tooltip: {showColorCode: true, isHtml: true},
-              isStacked: true
-            }
-            var chart = new google.visualization.ColumnChart(element);
-            chart.draw(data, options);   
-          }
-        })
-      }      
-
-      function drawPieChart() {
-        elements = document.querySelectorAll(".inlinepie")
-        elements.forEach(element => {
-          var label = element.dataset.label;
-          var mydata = eval(element.innerText)
-          element.innerText = ''
-          element.classList.remove("hidden")      
-          if(mydata.length >= 2) {        
-            var data = google.visualization.arrayToDataTable(
-              mydata
-            )
-            var options = {
-              animation: {'startup': true, 'duration': 300},
-              annotations: {textStyle: {bold: true}, alwaysOutside: false },
-              width: 600,
-              height: 350,
-              backgroundColor: 'none',
-              bar: {groupWidth: "80%"},
-              colors : ['#089', 'silver', '#545B77' ],
-              axisTitlesPosition: 'none',
-              chartArea: {width:'90%', height: '85%'},
-              tooltip : {showColorCode: true},
-              vAxis: {gridlines: {count : 0}, textPosition : 'in', baselineColor : 'none', textStyle: {color: '#089', bold: true} },
-              hAxis: {gridlines: {count : 0}, textPosition : 'none', baselineColor : 'none'},
-              legend: {'position': 'bottom'},
-              isStacked: true,
-              bars: 'horizontal'
-            }
-            var chart = new google.visualization.PieChart(element);
-            if(mydata[1][1] == 0 && mydata[2][1] == 0){
-              return 0
-            }
-            chart.draw(data, options);   
-          }
-        })
-      }      
-
-
-      function drawStackedColumnChart() {
-        elements = document.querySelectorAll(".inlinestackedcolumn")
-        elements.forEach(element => {
-          var label = element.dataset.label;
-          var mydata = eval(element.innerText)
-          element.innerText = ''
-          element.classList.remove("hidden")      
-          if(mydata.length > 1) {        
-            console.log(mydata)
-            var data = google.visualization.arrayToDataTable(
-              mydata
-            )
-            var options = {
-              animation: {'startup': true, 'duration': 300},
-              annotations: {textStyle: {bold: true}, alwaysOutside: false },
-              width: 600,
-              height: 350,
-              backgroundColor: 'none',
-              bar: {groupWidth: "80%"},
-              colors : [ '#089', 'silver', '#545B77', 'silver'],
-              axisTitlesPosition: 'none',
-              chartArea: {width:'100%', height: '85%'},
-              tooltip : {showColorCode: true},
-              vAxis: {gridlines: {count : 0}, textPosition : 'none', baselineColor : 'none', textStyle: {color: '#089', bold: true} },
-              hAxis: {gridlines: {count : 0}, textPosition : 'none', baselineColor : 'none'},
-              legend: {'position': 'bottom'},
-              isStacked: true,
-              bars: 'horizontal'
-            }
-            var chart = new google.visualization.AreaChart(element);
-            chart.draw(data, options);   
-          }
-        })
-      }      
-
-
-      function search_kd(el){
-        //store the current value 
-        el.oldvalue = el.value
-      }
-      function search_ku(el){
-        //check if the value has changed and if so
-        // set a new timer to fire a request in 300ms
-        // removing any existing timer first
-        if(el.value == el.oldvalue){
-          return
-        }else{
-          el.oldvalue = null
-        }        
-        if(el.timeout){
-          window.clearTimeout(el.timeout)
-        }
-        el.timeout = window.setTimeout(function(){
-          el.timeout = null
-          window.location = locationWithParam('search', el.value)
-        }, 500)
-      }
-      
-      $(document).ready(function(){
-        /*
-        el = $('#search-field')[0]
-        el.focus()
-        if(el.value && el.value.length > 0){
-          el.setSelectionRange(el.value.length, el.value.length)
-          var list = $("table.sortable div.label") //[0].children[0].children
-          for(var i=0; i < list.length; i++){
-            //console.log(list[i])
-            var link = list[i].children[0] //.children[0].children[0]
-            var re = new RegExp("("+el.value+")", "giu")
-            link.innerHTML = link.innerHTML.replaceAll(re, "<span class='token'>$1</span>") ;
-          }
-        }
-        */          
-      })
-      
-      function locationWithParam(param, value){
-          var query = window.location.search
-          var params = new URLSearchParams(query)
-          params.set(param, value)
-          var l = window.location
-          return l.origin + l.pathname + '?' + params.toString()
-      }
-    </script>
 </html>
-

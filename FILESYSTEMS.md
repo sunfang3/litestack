@@ -53,3 +53,21 @@ A new CoW filesystem built on the foundations of the bcache module. Improving ra
 
 
 
+
+## Migration backups (1.0+)
+
+Destructive schema upgrades create a sibling snapshot named
+`.litestack-backup-v<source_version>-<UTC>-<pid>.sqlite3` next to the durable
+database via SQLite online backup (separate read-source and destination
+connections). Snapshots are verified with full `PRAGMA integrity_check` and
+`PRAGMA foreign_key_check`, then published with same-directory hard-link
+no-replace semantics. Backups are never auto-deleted. Ephemeral Litecache and
+Litecable files may be rebuilt without backup.
+
+### Recoverability promise
+
+The durable upgrade/backup guarantee applies only to **local filesystems** with
+reliable advisory locks, SQLite write locks, `fsync`, directory `fsync`, and
+same-filesystem hard-link publication. Network filesystems, aliases, and
+cross-volume temporary paths are rejected (`BackupPublicationError`) or are
+explicitly outside the power-loss recoverability promise.

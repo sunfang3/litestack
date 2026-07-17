@@ -2,37 +2,36 @@
 
 # all components should require the support module
 require_relative "litesupport"
-require 'oj'
-require 'bigdecimal'
-  
+require "oj"
+require "bigdecimal"
+
 module Litekd
-  
   DEFAULT_OPTIONS = {
     path: Litesupport.root.join("kd.sqlite3"),
     sync: 1,
-    mmap_size: 32 * 1024 * 1024, # 32MB
+    mmap_size: 32 * 1024 * 1024 # 32MB
   }
-  
-  def self.connection()
+
+  def self.connection
     # configuration should be loaded here
     @@connection ||= Litekd::Connection.new(DEFAULT_OPTIONS.merge(options))
   end
-  
+
   def self.options
     @@options ||= {}
   end
-  
+
   def self.configure(options = {})
     @@options = options
   end
-  
+
   def self.clear!
     connection.transaction(:immediate) do
       connection.clear_all_scalars
       connection.clear_all_composites
     end
   end
-  
+
   # scalars
   def self.string(key, **args) = Scalar.new(key, typed: :string, **args)
   def self.integer(key, **args) = Scalar.new(key, typed: :integer, **args)
@@ -54,25 +53,22 @@ module Litekd
   def self.set(key, **args) = Set.new(key, **args)
   def self.ordered_set(key, **args) = OrderedSet.new(key, **args)
   def self.hash(key, **args) = Hash.new(key, **args)
-      
-end 
+end
 
-require_relative './litekd/type_serializer'
-require_relative './litekd/callbacks'
-require_relative './litekd/connection'
-require_relative './litekd/scalar'
-require_relative './litekd/counter'
-require_relative './litekd/cycle'
-require_relative './litekd/enum'
-require_relative './litekd/slots'
-require_relative './litekd/flag'
-require_relative './litekd/limiter'
-require_relative './litekd/composite'
-require_relative './litekd/list'
-require_relative './litekd/unique_list'
-require_relative './litekd/set'
-require_relative './litekd/ordered_set'
-require_relative './litekd/hash'
-require_relative './litekd/attributes'
-
-
+require_relative "litekd/type_serializer"
+require_relative "litekd/callbacks"
+require_relative "litekd/connection"
+require_relative "litekd/scalar"
+require_relative "litekd/counter"
+require_relative "litekd/cycle"
+require_relative "litekd/enum"
+require_relative "litekd/slots"
+require_relative "litekd/flag"
+require_relative "litekd/limiter"
+require_relative "litekd/composite"
+require_relative "litekd/list"
+require_relative "litekd/unique_list"
+require_relative "litekd/set"
+require_relative "litekd/ordered_set"
+require_relative "litekd/hash"
+require_relative "litekd/attributes"

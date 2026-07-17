@@ -58,6 +58,11 @@ class Litecable
     capture(:unsubscribe, channel)
   end
 
+  def close(timeout: shutdown_timeout)
+    @running = false
+    super
+  end
+
   private
 
   # broadcast the message to local subscribers
@@ -78,48 +83,65 @@ class Litecable
     @pid = Process.pid
     @subscribers = Litesupport::Pool.new(1) { {} }
     @running = true
-    @listener = create_listener
-    @pruner = create_pruner
-    @broadcaster = create_broadcaster
+    @listener = track_worker(create_listener)
+    @pruner = track_worker(create_pruner)
+    @broadcaster = track_worker(create_broadcaster)
     @last_fetched_id = nil
   end
 
   def create_broadcaster
+    waiter = track_waiter
     Litescheduler.spawn do
       while @running
-        @messages.acquire do |msgs|
-          if msgs.length > 0
-            run_sql("BEGIN IMMEDIATE")
-            while (msg = msgs.shift)
-              run_stmt(:publish, msg[0], msg[1], @pid)
+        begin
+          @messages.acquire do |msgs|
+            if msgs.length > 0
+              run_sql("BEGIN IMMEDIATE")
+              while (msg = msgs.shift)
+                run_stmt(:publish, msg[0], msg[1], @pid)
+              end
+              run_sql("END")
             end
-            run_sql("END")
           end
+        rescue Litestack::ClosedError, ThreadError
+          break
         end
-        sleep 0.02
+        waiter.sleep(0.02)
       end
     end
   end
 
   def create_pruner
+    waiter = track_waiter
     Litescheduler.spawn do
       while @running
-        run_stmt(:prune, @options[:expire_after])
-        sleep @options[:expire_after]
+        begin
+          run_stmt(:prune, @options[:expire_after])
+        rescue Litestack::ClosedError
+          break
+        end
+        waiter.sleep(@options[:expire_after])
       end
     end
   end
 
   def create_listener
+    waiter = track_waiter
     Litescheduler.spawn do
       while @running
-        @last_fetched_id ||= run_stmt(:last_id)[0][0] || 0
-        run_stmt(:fetch, @last_fetched_id, @pid).to_a.each do |msg|
-          @logger.info "RECEIVED #{msg}"
-          @last_fetched_id = msg[0]
-          local_broadcast(msg[1], Oj.load(msg[2]))
+        begin
+          @last_fetched_id ||= run_stmt(:last_id)[0][0] || 0
+          run_stmt(:fetch, @last_fetched_id, @pid).to_a.each do |msg|
+            @logger.info "RECEIVED #{msg}"
+            @last_fetched_id = msg[0]
+            local_broadcast(msg[1], Oj.load(msg[2]))
+          end
+        rescue Litestack::ClosedError
+          break
+        rescue Oj::ParseError => e
+          @logger&.warn { "[litecable] malformed message: #{e.message}" }
         end
-        sleep @options[:listen_interval]
+        waiter.sleep(@options[:listen_interval])
       end
     end
   end

@@ -1,0 +1,149 @@
+/* Liteboard local styles — no remote fonts/CDN */
+:root {
+  --lb-bg: #fff;
+  --lb-fg: #222;
+  --lb-accent: #078;
+  --lb-muted: #444;
+  --lb-border: #089;
+  --lb-focus: #0af;
+  --lb-footer-bg: rgba(0, 136, 153, 0.06);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--lb-bg);
+  color: var(--lb-fg);
+  line-height: 1.45;
+}
+
+a { color: var(--lb-accent); }
+a:visited { color: var(--lb-accent); }
+
+:focus-visible {
+  outline: 3px solid var(--lb-focus);
+  outline-offset: 2px;
+}
+
+.lb-header {
+  width: 100%;
+  border-bottom: 1px solid var(--lb-border);
+  padding: 0.75rem 1rem;
+}
+
+.lb-logo { font-weight: 700; letter-spacing: 0.02em; }
+.lb-logo-half { color: var(--lb-accent); }
+
+.lb-shell {
+  display: grid;
+  grid-template-columns: 15rem 1fr;
+  gap: 1rem;
+  padding: 1rem;
+  min-height: 70vh;
+}
+
+@media (max-width: 48rem) {
+  .lb-shell { grid-template-columns: 1fr; }
+}
+
+.lb-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #ddd;
+  border-radius: 0.25rem;
+}
+
+.lb-nav a {
+  display: block;
+  padding: 0.6rem 0.75rem;
+  text-decoration: none;
+  border-bottom: 1px solid #eee;
+}
+
+.lb-nav a[aria-current="page"] {
+  background: var(--lb-accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.lb-main { min-width: 0; }
+
+.lb-footer {
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  background: var(--lb-footer-bg);
+  border-top: 1px solid rgba(0, 136, 153, 0.3);
+  padding: 0.5rem 1rem;
+  text-align: right;
+}
+
+table.lb-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+}
+
+.lb-table th, .lb-table td {
+  border-bottom: 1px solid #e5e5e5;
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.lb-table th {
+  color: var(--lb-accent);
+  font-weight: 500;
+}
+
+.lb-table th[aria-sort] { font-weight: 700; }
+
+.lb-table td.empty { text-align: center; color: var(--lb-muted); }
+
+.lb-empty {
+  padding: 1.25rem;
+  border: 1px dashed #bbb;
+  border-radius: 0.35rem;
+  background: #fafafa;
+}
+
+.lb-metric {
+  display: inline-block;
+  margin: 0.25rem 0.75rem 0.25rem 0;
+}
+
+.lb-metric strong { display: block; font-size: 1.25rem; }
+.lb-metric span { color: var(--lb-muted); font-size: 0.85rem; }
+
+.lb-controls label {
+  display: inline-block;
+  margin-right: 0.75rem;
+}
+
+input, select {
+  border-radius: 3px;
+  border: 1px solid #ccc;
+  padding: 0.25rem 0.4rem;
+}
+
+.chart-fallback {
+  overflow-x: auto;
+  margin: 0.5rem 0 1rem;
+}
+
+.noscript-note {
+  padding: 0.5rem 0.75rem;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  margin: 0.5rem 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

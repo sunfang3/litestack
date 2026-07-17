@@ -200,8 +200,8 @@ class Litecache
     run_sql("delete FROM data")
   end
 
-  # close the connection to the cache file
-  def close
+  # close the connection to the cache file (idempotent via Liteconnection)
+  def close(timeout: shutdown_timeout)
     @running = false
     super
   end
@@ -228,22 +228,27 @@ class Litecache
 
   def setup
     super # create connection
-    @bgthread = spawn_worker # create background pruner thread
+    @bgthread = track_worker(spawn_worker) # create background pruner thread
   end
 
   def spawn_worker
+    waiter = track_waiter
     Litescheduler.spawn do
       while @running
-        @conn.acquire do |cache|
-          cache.stmts[:pruner].execute!
-        rescue SQLite3::BusyException
-          retry
-        rescue SQLite3::FullException
-          cache.stmts[:extra_pruner].execute!(0.2)
-        rescue Exception # standard:disable Lint/RescueException
-          # database is closed
+        begin
+          @conn.acquire do |cache|
+            cache.stmts[:pruner].execute!
+          rescue SQLite3::BusyException
+            retry
+          rescue SQLite3::FullException
+            cache.stmts[:extra_pruner].execute!(0.2)
+          rescue SQLite3::Exception
+            # database is closed
+          end
+        rescue Litestack::ClosedError, ThreadError
+          break
         end
-        sleep @options[:sleep_interval]
+        waiter.sleep(@options[:sleep_interval])
       end
     end
   end

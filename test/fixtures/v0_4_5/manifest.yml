@@ -1,0 +1,26 @@
+---
+source: commit e598e1b pre-modernization 0.4.5
+commit: e598e1b
+ruby: 4.0.5
+sqlite3: 2.9.5
+created_at: '2026-07-17T09:45:35Z'
+expectations:
+  litedb:
+    people_count: 2
+    names:
+    - carol
+    - dave
+  litejob:
+    min_jobs: 1
+  litesearch:
+    docs_count: 1
+  litekd:
+    has_greeting: true
+  litemetric:
+    has_topic: FixtureTopic045
+checksums_sha256:
+  litedb: 012adc4cc8096caf8afb3fc67fd7964d9acc269760c06b8165bafe163a0c9b52
+  litejob: adfe89652c79166d682a70986b84720c9e1819ab3d423d037fbb089c9a50f1ce
+  litesearch: ef42402869ac22adc07772d417ccc39cba8827a70155c76dd952c8cd73d3cd66
+  litekd: 62edcfd11d0f199e43fbdcc8e66514e33e9040a7cedc48f9ad2fdc5925ce528a
+  litemetric: fa789d43bf195ddf5f01ad7fe539b0f0b992e6fe618fcbeaeb0de0142e87ff3c

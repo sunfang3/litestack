@@ -1,54 +1,44 @@
+<section aria-labelledby="home-heading">
+  <h2 id="home-heading">Topics</h2>
 
-
- 
-
-<div class="container">
-   <% @topics.each do |topic|%>
-
-    <div class = "row justify-content-center">
-
-    <div class = "col-6">
-      <div class="card">
-        <div class="card-header">
-          <a href="./topics/<%=encode(topic[0])%>?res=<%=@res%>"><%=topic[0]%></a>
-        </div>
-        <div class="card-body">
-          <div class="container">
-            <div class= "row">
-              <div class= "col">
-                <h1><%=topic[3]%> <span class="fs-4">events</span></h1>
-              </div>
-              <div class= "col">
-                <span class="inlineminicolumn hidden" data-label="Count"><%=Oj.dump(topic[4].unshift(['Time', 'Count'])) if topic[4]%></span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+  <% if @empty_state %>
+    <div class="lb-empty" role="status">
+      <p><strong>No metrics yet.</strong></p>
+      <p>Enable metrics on Litecache, Litejob, Litedb, or Litecable and generate traffic, then refresh this page.</p>
     </div>
-
-  </div>
-
-  <div class = "row">
-  &nbsp;<br/>
-  </div>
-
-  
-  <%end%>
-  <% if @topics.empty? %>
-    <div class = "row justify-content-center">
-
-    <div class = "col-6">
-      <div class="card">
-        <div class="card-header">
-          Topics
-        </div>
-        <div class="card-body justify-content-center">
-          No data to display
-        </div>
-      </div>
-    </div>
-
-  </div>
-  <%end%>
-</div>
+  <% else %>
+    <table class="lb-table">
+      <caption>Topic summaries for the selected time range</caption>
+      <thead>
+        <tr>
+          <th scope="col" <%= 'aria-sort="' + ((@dir == "asc") ? "ascending" : "descending") + '"' if sorted?("topic") %>>
+            <a href="<%= index_sort_url("topic") %>">Topic <%= dir("topic") %></a>
+          </th>
+          <th scope="col">Events</th>
+          <th scope="col">Activity</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @topics.each do |topic| %>
+          <tr>
+            <td><a href="<%= topic_url(topic[0]) %>"><%= h(topic[0]) %></a></td>
+            <td><%= format(topic[1] || 0) %></td>
+            <td>
+              <div class="chart-fallback" data-chart='<%= h(json_data(topic[2] || [])) %>'>
+                <table class="lb-table">
+                  <caption class="visually-hidden">Activity series for <%= h(topic[0]) %></caption>
+                  <thead><tr><th scope="col">Time</th><th scope="col">Count</th></tr></thead>
+                  <tbody>
+                    <% Array(topic[2]).last(5).each do |pt| %>
+                      <tr><td><%= h(pt[0]) %></td><td><%= format(pt[1] || 0) %></td></tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>

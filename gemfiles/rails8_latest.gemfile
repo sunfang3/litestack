@@ -1,0 +1,9 @@
+# frozen_string_literal: true
+
+# Latest released Rails 8.x within the supported band (>= 8.1, < 9)
+source "https://rubygems.org"
+
+gemspec path: "../"
+
+gem "rails", "~> 8.1", "< 9"
+gem "sqlite3", "~> 2.0"

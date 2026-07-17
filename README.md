@@ -22,15 +22,38 @@ With litestack you only need to add a single gem to your app which would replace
 To make it even more efficient, litestack will detect the presence of Fiber based IO frameworks like Async (e.g. when you use the Falcon web server) or Polyphony. It will then switch its background workers for caches and queues to fibers (using the semantics of the existing framework). This is done transparently and will generally lead to lower CPU and memory utilization.
 ![litestack](https://github.com/oldmoe/litestack/blob/master/assets/litestack_advantage.png?raw=true)
 
+## Requirements
+
+| Runtime | Supported | Unsupported |
+|---------|-----------|-------------|
+| **Ruby** | `>= 4.0` (verified 4.0.0, 4.0.5) | Ruby &lt; 4.0 |
+| **Rails** (optional) | `>= 8.1, &lt; 9` (verified 8.1.0, 8.1.3) | Rails &lt; 8.1, Rails 9+ |
+| **sqlite3** | 2.x | 1.x |
+
+Rails is **not** a runtime dependency. Standalone use works with `require "litestack"`. Loading Railtie/adapters against an unsupported Rails version raises `Litestack::UnsupportedFrameworkVersionError`.
+
+Upgrading from 0.4.x? See **[docs/MIGRATING_TO_RUBY4_RAILS81.md](docs/MIGRATING_TO_RUBY4_RAILS81.md)** for durable backup/recovery, quiescence rules, and optional Solid Cache/Queue cleanup (the generator never auto-deletes them).
+
 ## Installation
 
-Add the `litestack` gem line to your application's Gemfile:
+Add the `litestack` gem line to your application's Gemfile (Ruby 4+):
 
     $ bundle add litestack
 
-To configure a Rails application to run the full litestack, run:
+To configure a Rails 8.1+ application to run the full litestack, run:
 
     $ rails generate litestack:install
+
+## Development
+
+```bash
+bundle install
+bundle exec rake test
+bundle exec rake standard
+bundle exec ruby scripts/verify_package.rb
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor workflow.
 
 ## Usage
 
