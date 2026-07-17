@@ -9,16 +9,16 @@
 
 Litestack remains a layered gem rather than becoming a Rails-only package. `lib/litestack.rb` is the optional-integration entry point; the standalone components continue to sit above `Litesupport::Liteconnection`, the scheduler/pool layer, and sqlite3. Rails-facing files remain thin adapters registered through public Rails 8.1 extension points: Active Record adapter registration, Active Job's adapter interface, Active Support's cache-store interface, Action Cable's subscription interface, and a Railtie/generator for application configuration. Sequel remains an optional peer integration.
 
-Durable schema evolution is centralized behind one small migrator used by the shared connection path. It reads `PRAGMA user_version`, validates the source, runs each version step transactionally, and creates a verified sidecar backup before any step marked destructive. Component SQL YAML remains the source of schema steps. Ephemeral Litecache/Litecable files are rebuildable; Litedb, Litejob, Litesearch, LiteKD, and Litemetric receive historical fixture tests.
+Durable schema evolution is centralized behind one small migrator used by the shared connection path and Litesearch's destructive schema/rebuild path. It requires old processes to be quiesced, acquires cooperative process and SQLite write locks, reads `PRAGMA user_version`, validates the source, runs ordered steps transactionally, and creates a verified sidecar backup before any destructive change. Component SQL YAML remains the source of versioned schema steps. Ephemeral Litecache/Litecable files are rebuildable; Litedb, Litejob, Litesearch, LiteKD, and Litemetric receive historical fixture tests.
 
-Verification has three layers: component Minitest contracts, a built-gem Rails 8.1 temporary-application smoke test, and package/release checks. The exact blocking environment is Ruby 4.0.5 + Rails 8.1.3 + sqlite3 2.x. Rails main/Ruby head are warnings only. CI builds the gem before the Rails application test so path-source behavior cannot hide packaging or load-path defects.
+Verification has three layers: component Minitest contracts, a built-gem Rails 8.1 temporary-application smoke test, and package/release checks. The blocking environments are the Ruby 4.0.0 + Rails 8.1.0 lower bound, the exact Ruby 4.0.5 + Rails 8.1.3 target, and the latest released Ruby 4.x + Rails 8.x pair within the declared bounds, all with sqlite3 2.x. Rails main/Ruby head are warnings only. CI builds the gem before the Rails application test so path-source behavior cannot hide packaging or load-path defects.
 
 ## Implementation Phases
 
 1. **Foundation:** Units 1–3 establish resolvable dependencies, a trustworthy quality gate, and safe runtime lifecycle behavior.
 2. **Framework contracts:** Units 4–8 modernize each Rails integration and generator independently.
 3. **Data and application proof:** Units 9–12 implement recoverable migration behavior, historical fixtures, and a real Rails application smoke test.
-4. **Delivery:** Units 13–18 make CI, package verification, utilities, benchmarks, documentation, and the breaking release internally consistent.
+4. **Experience and delivery:** Units 13–20 make CI/package verification, Liteboard, utilities, benchmarks, documentation, and the breaking release internally consistent.
 
 ### Unit 1: Ruby 4 and Rails 8.1 Dependency Baseline
 
@@ -35,8 +35,10 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 - `gemfiles/rails70.gemfile` — remove the unsupported Rails 7.0 definition.
 - `gemfiles/rails71.gemfile` — remove the unsupported Rails 7.1 definition.
 - `gemfiles/rails71.gemfile.lock` — remove the stale arm64-Darwin/Bundler 2 lock.
+- `lib/litestack/compatibility.rb` — enforce the optional Rails integration support band without making Rails a runtime dependency.
+- `test/test_compatibility.rb` — cover supported, missing, too-old, and too-new framework versions.
 
-**Approach:** Keep Rails optional at gem runtime: do not add Rails as a runtime dependency. Remove Active Record/Active Job/Railties version pins from development metadata and put the exact supported development stack in `Gemfile`. Set `required_ruby_version` to `>= 4.0`; constrain sqlite3 to the Rails-compatible 2.x band; declare directly required non-default libraries such as `logger` and `base64`; and align Minitest/tool versions with Ruby 4. Do not commit a platform-specific lock for the library unless it contains all supported platforms and is demonstrably useful.
+**Approach:** Keep Rails optional at gem runtime: do not add Rails as a runtime dependency. Remove Active Record/Active Job/Railties version pins from development metadata and put the exact supported development stack in `Gemfile`. Set `required_ruby_version` to `>= 4.0`; constrain sqlite3 to the Rails-compatible 2.x band; declare directly required non-default libraries such as `logger` and `base64`; and align Minitest/tool versions with Ruby 4. Add a small compatibility check, called only when a Railtie or Rails adapter is loaded, that accepts Rails `>= 8.1, < 9` and raises `Litestack::UnsupportedFrameworkVersionError` otherwise; standalone `require "litestack"` remains Rails-free. Do not commit a platform-specific lock for the library unless it contains all supported platforms and is demonstrably useful.
 
 **Patterns:** Preserve the existing gemspec/Gemfile separation and optional framework loading in `lib/litestack.rb`; use the current `gemfiles/` convention only for non-blocking future-framework checks added later.
 
@@ -45,6 +47,7 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 - [ ] Nil/empty input: building the gem without Rails loaded still resolves all standalone runtime dependencies.
 - [ ] Error path: Ruby 3.x installation is rejected by gem metadata with a clear required-version error.
 - [ ] Edge case: package dependency inspection confirms Rails was not accidentally made a runtime dependency.
+- [ ] Edge case: Rails 8.0 and Rails 9 adapter/Railtie entry points fail with the named compatibility error while Rails 8.1 succeeds.
 
 **Verification:** `ruby -v`, `bundle platform`, `bundle exec ruby -e 'require "rails"; abort unless Rails.version == "8.1.3"'`, and `gem specification ./litestack-*.gem required_ruby_version dependencies` show the chosen contract.
 
@@ -66,7 +69,7 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 - `.simplecov` — centralize line/branch measurement, result merging, and minimum thresholds.
 - `test/test_litescheduler.rb` — make the scheduler double implement Ruby 4's required callbacks.
 
-**Approach:** Preload `test/helper.rb` through the Rake test command before any test file, rather than editing every test solely for require order. Reset global queues, scheduler backend state, threads, connections, and constants in shared hooks. Measure a clean full-suite baseline first, set non-regression thresholds to that measured result, then require new compatibility code to be covered. Configure Standard for Ruby 4 and fix only blocking/currently touched code in later units; isolate legacy style debt explicitly instead of claiming it passes.
+**Approach:** Preload `test/helper.rb` through the Rake test command before any test file, rather than editing every test solely for require order. Reset global queues, scheduler backend state, threads, connections, and constants in shared hooks. Measure a clean full-suite baseline first and set non-regression thresholds to that measured result. Enforce 100% line and branch coverage on new compatibility files and materially changed branches through per-file checks; any genuinely unreachable exclusion is named, justified, and reviewed instead of silently omitted. Configure Standard for Ruby 4 and fix only blocking/currently touched code in later units; isolate legacy style debt explicitly instead of claiming it passes.
 
 **Patterns:** Continue using Minitest and `Rake::TestTask`; retain the existing shared helper and Standard Rake integration rather than introducing a second test framework.
 
@@ -75,6 +78,7 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 - [ ] Nil/empty input: running a single test file still initializes coverage and cleanup safely.
 - [ ] Error path: an intentionally lowered coverage result makes the coverage task exit non-zero.
 - [ ] Edge case: randomized test seeds run repeatedly without Litejob/global-state count leakage.
+- [ ] Edge case: an uncovered branch in a newly added compatibility file fails its per-file 100% gate even when aggregate coverage remains above baseline.
 
 **Verification:** `bundle exec rake test`, `bundle exec rake standard`, and `bundle exec rake verify` all exit zero; coverage timestamps and file counts prove project code was measured after the suite, and repeated seeds remain green.
 
@@ -91,14 +95,14 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 **Files:**
 - `lib/litestack/liteconnection.rb` — make close/at-exit behavior stateful, idempotent, and statement-close aware.
 - `lib/litestack/litescheduler.rb` — satisfy Ruby 4 scheduler semantics and reset correctly after fork.
-- `lib/litestack/litesupport.rb` — make pool acquisition/closure explicit and safe after shutdown.
 - `lib/litestack/litecache.rb` — stop and join the pruning worker before closing its connection.
 - `lib/litestack/litecable.rb` — stop and join listener/pruner/broadcaster workers before closing.
 - `lib/litestack/litejobqueue.rb` — coordinate dispatcher/worker shutdown and restart after fork.
 - `lib/litestack/litemetric.rb` — close collector resources and workers deterministically.
 - `test/test_lifecycle.rb` — add cross-component start/close/double-close/fork contract coverage.
+- `test/test_litemetric.rb` — verify standalone metric capture, aggregation, snapshot, empty, and shutdown behavior.
 
-**Approach:** Introduce explicit running/closing/closed states in the shared connection lifecycle, guard every statement/connection close with its actual state, unregister or neutralize exit callbacks after explicit close, and retain worker handles so shutdown can signal and join with a bounded timeout. A forked child creates fresh connection and worker state without inheriting a cached backend that no longer matches. Do not rescue `Exception` to hide lifecycle defects; name expected sqlite3 closed/busy cases.
+**Approach:** Introduce explicit running/closing/closed states in the shared connection lifecycle, guard every statement/connection close with its actual state, unregister or neutralize exit callbacks after explicit close, and retain worker handles so shutdown can signal and join for a configurable five-second default timeout. A forked child creates fresh connection and worker state without inheriting a cached backend that no longer matches. Do not rescue `Exception` to hide lifecycle defects; use named `Litestack::ClosedError` and `Litestack::ShutdownTimeoutError` failures and structured logger/notification events for timeout/failure state. Exercise Litemetric's public behavior as well as its lifecycle.
 
 **Patterns:** Extend the existing `Liteconnection`, `Litescheduler.spawn`, `ForkListener`, and component `setup`/`close` hooks rather than adding a parallel process manager.
 
@@ -111,11 +115,11 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 
 **Verification:** `bundle exec ruby -Itest test/test_lifecycle.rb` exits zero under sqlite3 2.x, reports no surviving Litestack threads/fibers, and reproduces then eliminates the previously observed `cannot use a closed statement` failure.
 
-**Planning-time unknowns:** Deferred to Planning — choose a bounded worker join timeout from observed test timings; timeout expiry must raise/log a named lifecycle error rather than silently leak.
+**Planning-time unknowns:** None; the default shutdown timeout is five seconds and remains configurable for applications with measured longer drains.
 
-### Unit 4: Rails 8.1 Active Record and Dbconsole Contract
+### Unit 4: Rails 8.1 Active Record and Sequel Contracts
 
-**Goal:** Establish and operate Litedb connections through Rails 8.1 public adapter registration without monkey patches or copied command internals.
+**Goal:** Establish and operate Litedb/search connections through the supported Rails 8.1 and Sequel adapter paths without test monkey patches.
 
 **Requirements trace:** R2, R4, R5, R9, R18
 
@@ -123,15 +127,17 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 
 **Files:**
 - `lib/active_record/connection_adapters/litedb_adapter.rb` — adopt the Rails 8.1 adapter construction/client contract and preserve Litedb behavior.
-- `lib/railties/rails/commands/dbconsole.rb` — remove the copied `Rails::DBConsole#start` implementation.
 - `lib/litestack.rb` — stop conditionally loading the copied dbconsole patch and load adapter registration safely.
+- `lib/sequel/adapters/litedb.rb` — preserve the optional Sequel adapter/search contract on Ruby 4 and sqlite3 2.x.
 - `test/test_ar_search.rb` — exercise the registered adapter through normal configuration.
 - `test/patch_ar_adapter_path.rb` — remove the connection-handler monkey patch.
 - `test/test_litedb_rails.rb` — cover connection, schema, CRUD, reconnect, errors, and adapter dbconsole dispatch.
+- `test/test_litedb.rb` — verify standalone Litedb query, statement, transaction, metrics, empty, and error behavior.
+- `test/test_sequel_search.rb` — exercise Litedb and Litesearch through Sequel without Rails constants loaded.
 
-**Approach:** Retain `ActiveRecord::ConnectionAdapters.register`, implement Litedb client construction at the same seam used by Rails 8.1's SQLite adapter, and let the superclass own connection parameters/configuration where possible. Preserve custom native types deliberately and test each difference from SQLite3Adapter. Keep dbconsole support in the adapter's public class method; do not reopen Rails command classes. Raise Rails exceptions with pool/context information where Rails expects it.
+**Approach:** Retain `ActiveRecord::ConnectionAdapters.register`, implement Litedb client construction at the same seam used by Rails 8.1's SQLite adapter, and let the superclass own connection parameters/configuration where possible. Preserve custom native types deliberately and test each difference from SQLite3Adapter. Keep dbconsole support in the adapter's public class method; do not reopen Rails command classes. Raise Rails exceptions with pool/context information where Rails expects it. Load Sequel only when present and exercise its public adapter/database hooks independently so Rails compatibility work cannot hide a peer-integration regression.
 
-**Patterns:** Follow Rails 8.1's installed `SQLite3Adapter` implementation and the project's existing adapter/task registration, while keeping Litestack-specific behavior inside `LitedbAdapter`.
+**Patterns:** Follow Rails 8.1's installed `SQLite3Adapter` and Sequel's public adapter interfaces while keeping Litestack-specific behavior inside the existing Litedb adapter boundaries.
 
 **Test scenarios:**
 - [ ] Happy path: `ActiveRecord::Base.establish_connection(adapter: "litedb")` migrates, inserts, queries, reconnects, and dumps schema.
@@ -139,8 +145,9 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 - [ ] Error path: a nonexistent/unwritable database path raises `ActiveRecord::NoDatabaseError` rather than a raw system exception.
 - [ ] Edge case: in-memory and URI-style SQLite database paths are not expanded as filesystem paths.
 - [ ] Edge case: dbconsole delegates to `LitedbAdapter.dbconsole` without changing other adapters' behavior.
+- [ ] Edge case: Sequel Litedb/search loads and queries when Rails and Active Record are absent.
 
-**Verification:** The new AR tests pass without requiring `test/patch_ar_adapter_path.rb`; a Rails 8.1 process reports `adapter_name == "litedb"` and executes migration/CRUD/dbconsole smoke paths.
+**Verification:** The new AR tests pass without requiring `test/patch_ar_adapter_path.rb`; a Rails 8.1 process reports `adapter_name == "litedb"` and executes migration/CRUD/dbconsole smoke paths, and the Sequel contract passes in a separate Rails-free process.
 
 **Planning-time unknowns:** Deferred to Planning — verify whether the Rails 8.1 superclass `new_client` seam alone is sufficient for all Litedb options; if not, isolate one minimal override and contract-test it.
 
@@ -191,7 +198,7 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 - `test/test_jobqueue.rb` — verify queue persistence, retry, and shutdown primitives.
 - `test/test_active_job_contract.rb` — cover Rails 8.1 adapter, transactions, continuations/stopping, and serialization.
 
-**Approach:** Derive from `ActiveJob::QueueAdapters::AbstractAdapter`, implement enqueue/enqueue_at return and provider ID behavior consistently, expose `stopping?`, and retain the supported `enqueue_after_transaction_commit?` hook. Ensure queue name is not stored in a racy global class attribute across simultaneous enqueues; pass it with each push. Keep Active Job serialization authoritative and exercise retry/scheduled timestamps under Ruby 4.
+**Approach:** Derive from `ActiveJob::QueueAdapters::AbstractAdapter`, implement enqueue/enqueue_at return and provider ID behavior consistently, expose `stopping?`, and retain the supported `enqueue_after_transaction_commit?` hook. Ensure queue name is not stored in a racy global class attribute across simultaneous enqueues; pass it with each push. Once stopping begins, new enqueues remain durably accepted for a later process but are not started locally; return the provider ID and emit a structured deferred-during-shutdown event. Keep Active Job serialization authoritative and exercise retry/scheduled timestamps under Ruby 4.
 
 **Patterns:** Follow Rails 8.1 built-in adapters' interface while continuing to use `Litejobqueue` as the standalone engine.
 
@@ -204,7 +211,7 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 
 **Verification:** Existing and new Active Job suites pass under Rails 8.1.3; randomized concurrent named-queue tests show no queue-name cross-talk; shutdown leaves no jobs silently in flight.
 
-**Planning-time unknowns:** Deferred to Planning — choose and document whether new enqueues during stopping are rejected with a named error or accepted for later processing; match the least surprising Rails adapter behavior before coding the final branch.
+**Planning-time unknowns:** None; new work during stopping is persisted for the next process and never silently discarded or started by the draining process.
 
 ### Unit 7: Rails 8.1 Action Cable Contract
 
@@ -249,6 +256,7 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 - `lib/generators/litestack/install/templates/database.yml` — provide Rails 8.1-compatible Litedb configuration examples.
 - `lib/generators/litestack/install/templates/cable.yml` — provide Rails 8.1-compatible Litecable configuration.
 - `lib/generators/litestack/install/USAGE` — document generated changes and Solid Cache/Queue coexistence/removal choices.
+- `lib/railties/rails/commands/dbconsole.rb` — remove the copied `Rails::DBConsole#start` implementation now that the adapter owns dispatch.
 - `test/test_install_generator.rb` — assert fresh/existing/idempotent generator behavior.
 - `test/test_railtie.rb` — boot with/without Active Record and assert initializer behavior.
 
@@ -279,9 +287,11 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 - `lib/litestack/schema_migrator.rb` — implement preflight, version ordering, destructive-step backup, transaction, verification, and recovery.
 - `lib/litestack/liteconnection.rb` — delegate SQL YAML schema application to the migrator.
 - `lib/litestack/litesupport.rb` — define named migration/backup errors and shared filesystem helpers.
+- `lib/litestack/litesearch/index.rb` — route `WRITABLE_SCHEMA`, index rebuild, drop, and destructive field changes through the same protection boundary.
 - `test/test_schema_migrator.rb` — cover no-op, additive, destructive, invalid, and injected-failure paths.
+- `test/test_litesearch_schema_migration.rb` — verify protected schema edits/rebuilds preserve searchable rows and recover on failure.
 
-**Approach:** Preserve SQL YAML and `PRAGMA user_version` as the migration source of truth. Validate monotonically ordered integer versions and current file readability before mutation. Run each step in a transaction. Require a step-level destructive marker before creating a same-directory, fsync-complete backup; never infer safety silently. After migration, verify expected user version and openability. On failure, roll back and leave the original path usable, retaining the backup with a reported location.
+**Approach:** Preserve SQL YAML and `PRAGMA user_version` as the migration source of truth. Parse packaged SQL definitions with safe YAML loading and validate the complete shape plus monotonically ordered integer versions before mutation. Require the operator to quiesce old Litestack processes; the migrator acquires a sibling advisory lock and a bounded SQLite `BEGIN IMMEDIATE` write lock, raising `Litestack::MigrationBusyError` before mutation if either cannot be obtained, and holds the database lock through commit/rollback. If any pending step is destructive, use SQLite's online backup API before the first step to create an exclusive-new sibling temporary snapshot while the write lock prevents committed-state drift. Finish and close both backup handles in `ensure`, validate the snapshot with `PRAGMA quick_check` and a checksum, apply permissions no broader than the source and at most `0600`, fsync the file and parent directory, and atomically rename it without overwriting to `.litestack-backup-v<source>-<UTC>-<pid>.sqlite3`; use subsecond UTC and abort on collision. Never auto-delete the backup. Run the ordered steps under the outer transaction with a savepoint per step, verify expected user version and integrity, then commit. On failure, roll back and leave the original path usable, retaining and reporting any completed snapshot. The same protected destructive-change seam wraps Litesearch `WRITABLE_SCHEMA`, rebuild, drop, and field-removal paths. Emit structured `migration.start`, `backup.created`, `step.completed`, `migration.succeeded`, and `migration.failed` events through the configured logger and Active Support notifications when available; payloads contain component, source/target version, step, duration, backup basename, and error class, but no row values, bind data, or absolute path by default.
 
 **Patterns:** Extract the version loop currently in `Liteconnection#create_connection` into one focused object; do not introduce a general ORM migration DSL.
 
@@ -290,11 +300,15 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 - [ ] Nil/empty input: an already-current file performs no writes or backup.
 - [ ] Error path: invalid YAML/version gaps and injected SQL failures raise named errors and preserve the source.
 - [ ] Edge case: a destructive step creates and verifies a backup before mutation.
+- [ ] Edge case: a database with live WAL content produces a snapshot containing committed WAL rows and no uncommitted rows.
 - [ ] Edge case: insufficient backup disk/permissions abort before the database transaction begins.
+- [ ] Edge case: a concurrent writer or second migrator times out with `MigrationBusyError` and neither source nor backup is changed.
+- [ ] Edge case: an idle pre-upgrade process is treated as an operator quiescence violation in documentation because no cooperative lock can prove it is absent.
+- [ ] Edge case: a failing Litesearch rebuild restores searchable pre-change content and retains its verified snapshot.
 
-**Verification:** `bundle exec ruby -Itest test/test_schema_migrator.rb` asserts version, content, backup checksum, failure recovery, and absence of partial schema objects.
+**Verification:** `bundle exec ruby -Itest test/test_schema_migrator.rb` and `bundle exec ruby -Itest test/test_litesearch_schema_migration.rb` assert lock exclusion, version, content/search results, backup checksum, failure recovery, handle cleanup, and absence of partial schema objects.
 
-**Planning-time unknowns:** Deferred to Planning — choose the backup suffix/retention convention before implementation; it must be deterministic, collision-safe, documented, and testable.
+**Planning-time unknowns:** None; snapshots use the documented version/time/PID sibling name, inherit restrictive permissions, and are retained until explicitly removed by the operator. Migration documentation requires stop-the-world deployment for old processes because only upgraded processes honor the advisory lock.
 
 ### Unit 10: Published 0.4.3 Durable Data Fixtures
 
@@ -386,32 +400,32 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 
 **Verification:** `bundle exec rake integration:rails81` exits zero and logs exact Ruby/Rails/sqlite/Litestack versions plus successful assertions for every Rails-facing component.
 
-**Planning-time unknowns:** Deferred to Planning — decide whether dbconsole verification stops at adapter argv construction when the system `sqlite3` CLI is unavailable; CI must still test the public dispatch path deterministically.
+**Planning-time unknowns:** None; CI verifies dbconsole adapter dispatch/argv with an injected executable seam and does not require a system sqlite3 CLI.
 
-### Unit 13: Exact-Target CI and Package Gate
+### Unit 13: Supported-Range CI and Package Gate
 
-**Goal:** Turn the Ruby 4.0.5/Rails 8.1.3 contract into a blocking, reproducible delivery gate and make future-version checks honest.
+**Goal:** Turn the lower-bound, exact-target, and latest-supported Ruby 4/Rails 8 contracts into blocking, reproducible gates and make future-version checks honest.
 
 **Requirements trace:** R1–R4, R12–R15
 
-**Dependencies:** Units 1, 2, and 12.
+**Dependencies:** Units 1, 2, 12, 14, and 15.
 
 **Files:**
 - `.github/workflows/ruby.yml` — replace the Rails 7 matrix with exact target test/style/integration/package jobs.
 - `Rakefile` — add package verification composition used locally and in CI.
 - `litestack.gemspec` — narrow packaged files and correct release metadata.
-- `gemfiles/rails_main.gemfile` — add a non-blocking future Rails source check.
+- `gemfiles/rails81_min.gemfile` — pin Rails 8.1.0 for the supported lower-bound job.
+- `gemfiles/rails8_latest.gemfile` — resolve the latest released supported Rails 8.x and optionally Rails main for non-blocking warning runs.
 - `scripts/verify_package.rb` — inspect gem contents/metadata and perform isolated install/require/executable smoke.
-- `bin/setup` — bootstrap the exact supported development environment clearly.
-- `bin/console` — run through the supported bundle without legacy assumptions.
 - `bin/liteboard` — provide deterministic help/start failure behavior for package smoke tests.
 
-**Approach:** Pin the blocking job to Ruby 4.0.5 and Rails 8.1.3, run tests and Standard before the slower built-gem app test, then inspect/install the artifact. Add Ruby head/Rails main as explicitly allowed-failure scheduled checks, not support claims. Update GitHub actions to maintained immutable versions/SHAs. Restrict gem contents to runtime, license/readme/changelog, and intentional executables; exclude tests, stale locks, scripts, and benchmarks unless deliberately shipped.
+**Approach:** Add three blocking combinations: Ruby 4.0.0 + Rails 8.1.0 for the declared floor, Ruby 4.0.5 + Rails 8.1.3 for the exact target, and the latest released Ruby 4.x + Rails 8.x inside the declared bounds. The floor runs dependency resolution and the full suite; exact/latest run tests and Standard before the slower built-gem app test, then inspect/install the artifact. Ruby head/Rails main remain explicitly allowed-failure scheduled checks, not support claims. Update GitHub actions to maintained immutable versions/SHAs. Restrict gem contents to runtime, license/readme/changelog, and intentional executables; exclude tests, stale locks, scripts, and benchmarks unless deliberately shipped. Exercise the verified Liteboard Rack app through the packaged executable and name startup/rendering failures.
 
 **Patterns:** Preserve a single GitHub Actions workflow and Bundler gem tasks, with local Rake tasks matching CI commands exactly.
 
 **Test scenarios:**
 - [ ] Happy path: exact-target CI runs resolution, tests, style, build, package inspection, install, executable, and Rails app smoke.
+- [ ] Happy path: the minimum and latest supported pairs resolve and complete their blocking suites without relaxing dependency bounds.
 - [ ] Nil/empty input: package inspection rejects an empty/missing artifact with a clear message.
 - [ ] Error path: an unintended file or wrong Ruby/Rails metadata causes the package job to fail.
 - [ ] Edge case: Rails main/Ruby head failures are visible but do not mark the supported target green or red incorrectly.
@@ -420,7 +434,70 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 
 **Planning-time unknowns:** Deferred to Planning — pin action SHAs to the maintained releases current at implementation time; record update provenance in the workflow comments.
 
-### Unit 14: Ruby 4 Developer Script Harness
+### Unit 14: Safe and Accessible Liteboard Shell
+
+**Goal:** Make Liteboard a valid Rack 3 application with safe rendering, explicit states, and an accessible responsive shell on Ruby 4.
+
+**Requirements trace:** R1, R4, R13, R14, R16, R18
+
+**Dependencies:** Units 2, 3, and 9.
+
+**Files:**
+- `lib/litestack/liteboard/liteboard.rb` — provide explicit routing/status/content types, safe parameters/rendering, and named failures.
+- `lib/litestack/liteboard/views/layout.erb` — add semantic landmarks, labels, focus/responsive/reduced-motion styles, and script-loading fallbacks.
+- `lib/litestack/liteboard/views/index.erb` — render a useful first-use/no-metrics state and accessible topic summaries.
+- `lib/litestack/liteboard/views/topic.erb` — label search/sort controls and expose table/chart meaning without color alone.
+- `lib/litestack/liteboard/views/event.erb` — label search/sort controls and expose event table/chart meaning.
+- `lib/litestack/liteboard/assets/liteboard.css` — replace remote/inline presentation with responsive, focus-visible, reduced-motion local styles.
+- `lib/litestack/liteboard/assets/liteboard.js` — provide dependency-free progressive chart enhancement from parsed JSON without inline script or `eval`.
+- `test/test_liteboard.rb` — verify Rack, security, empty/error, keyboard/semantic, and no-JavaScript contracts.
+
+**Approach:** Return a valid `[status, headers, body]` for every route, including 404 and 400 states, and set HTML content type plus `Content-Security-Policy`, `X-Content-Type-Options`, and referrer/frame protections. Replace broad rendering rescues and nil route returns with named `Liteboard::BadRequestError`/`RenderError` handling and visible recovery messages. Enable consistent HTML escaping for template values, encode URL segments, replace JavaScript `eval` with `JSON.parse` over safely encoded data, and test hostile metric/search values. Remove remote scripts, styles, fonts, inline script, and inline style; serve the two packaged assets with fixed content types and a self-only CSP so Liteboard works offline without mutable CDN code. Add `<header>`, labeled `<nav>`, `<main>`, `<footer>`, visible focus, `aria-current`, explicit form labels, sort text/`aria-sort`, reduced-motion handling, responsive layout, loading/failure/no-JavaScript feedback, and a text/table fallback for charts. Local JavaScript may progressively enhance a chart, but HTML remains authoritative.
+
+**Patterns:** Retain the existing small Rack proc, Tilt/Erubi templates, and Litemetric queries; improve the shared shell and rendering seam instead of adding a frontend framework.
+
+**Test scenarios:**
+- [ ] Happy path: index/topic/event routes return escaped HTML, correct headers, semantic landmarks, labels, and keyboard-visible controls.
+- [ ] Nil/empty input: a fresh metrics database displays a named no-data state and next action instead of blank charts/tables.
+- [ ] Error path: invalid route/query/render data returns a valid 400/404/500 response with a recovery message and structured log event.
+- [ ] Edge case: hostile HTML/JavaScript in topic, event, key, and search values is rendered as text and never executed.
+- [ ] Edge case: disabling/failing external JavaScript still leaves readable data tables and status text.
+- [ ] Edge case: CSP forbids inline/remote execution while packaged CSS/JavaScript assets load with correct MIME types offline.
+
+**Verification:** `bundle exec ruby -Itest test/test_liteboard.rb` validates Rack 3 responses, security headers, local assets, and HTML semantics with no network; a browser smoke at narrow/wide viewports and keyboard-only navigation confirms visible focus, readable fallback data, and no console CSP/`eval`/render errors.
+
+**Planning-time unknowns:** Deferred to Planning — use the lightest HTML assertion/accessibility checker compatible with Ruby 4; do not add a browser framework solely for static semantics if parsed HTML assertions cover them.
+
+### Unit 15: Accessible Liteboard Component Pages
+
+**Goal:** Give each component dashboard complete success, empty, partial, and failure states with non-visual data equivalents.
+
+**Requirements trace:** R4, R13, R16, R18
+
+**Dependencies:** Unit 14.
+
+**Files:**
+- `lib/litestack/liteboard/views/litecache.erb` — add semantic metric labels, zero-safe calculations, fallback tables, and empty states.
+- `lib/litestack/liteboard/views/litedb.erb` — add semantic metric labels, explicit missing snapshots, and accessible read/write data.
+- `lib/litestack/liteboard/views/litejob.erb` — add queue/job empty/draining/error states and accessible timing/count data.
+- `lib/litestack/liteboard/views/litecable.erb` — add subscription/message empty states and accessible channel data.
+- `test/test_liteboard_components.rb` — verify each component across full/empty/partial/corrupt snapshot inputs.
+
+**Approach:** Remove rescue-as-default expressions from templates; normalize view models in Ruby so templates receive explicit values/state. Use headings in order, metric names with units, table captions and scoped headers, textual chart summaries, and visible empty/partial/error messages. Sorting and trends must not rely only on color or icons. Keep existing layout and chart library as progressive enhancement.
+
+**Patterns:** Reuse Unit 14's escaped renderer, state components, and fallback markup; do not create a component framework.
+
+**Test scenarios:**
+- [ ] Happy path: each of four component pages renders named totals, units, accessible tables, and chart summaries.
+- [ ] Nil/empty input: absent events/snapshots render component-specific empty states without division/nil errors.
+- [ ] Error path: malformed or partial snapshot data renders a named partial/error state and logs the source failure.
+- [ ] Edge case: zero reads/writes/jobs/messages produce meaningful zero metrics without `NaN`, infinity, or broad rescue.
+
+**Verification:** Component tests parse rendered HTML for headings, captions, scoped headers, state messages, units, and escaped values; keyboard/no-JavaScript browser smoke covers one full and one empty component page.
+
+**Planning-time unknowns:** None; charts are progressive enhancement and the HTML data representation is authoritative.
+
+### Unit 16: Ruby 4 Developer Script Harness
 
 **Goal:** Make maintenance and diagnostic scripts finite, relocatable, dependency-declared, and documented on Ruby 4.
 
@@ -451,13 +528,13 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 
 **Planning-time unknowns:** None; scripts remain diagnostic and non-default.
 
-### Unit 15: Standalone Benchmark Harness
+### Unit 17: Standalone Benchmark Harness
 
 **Goal:** Make standalone cache/job/queue benchmarks reproducible and safe to smoke-test on Ruby 4.
 
 **Requirements trace:** R1, R4, R17
 
-**Dependencies:** Units 1, 2, and 14.
+**Dependencies:** Units 1, 2, and 16.
 
 **Files:**
 - `BENCHMARKS.md` — document reproducible environment, commands, sampling, and result provenance.
@@ -483,13 +560,13 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 
 **Planning-time unknowns:** Deferred to Planning — performance numbers are refreshed only after compatibility code stabilizes; no fixed performance threshold is invented before measurement.
 
-### Unit 16: Rails Benchmark Paths
+### Unit 18: Rails Benchmark Paths
 
 **Goal:** Make Rails cache/job benchmarks execute against the supported Rails 8.1 contract without serving as unverified compatibility claims.
 
 **Requirements trace:** R2, R4, R7, R17
 
-**Dependencies:** Units 4–7 and 15.
+**Dependencies:** Units 4–7 and 17.
 
 **Files:**
 - `bench/bench_cache_rails.rb` — benchmark Litecache through Rails 8.1 cache APIs with cleanup.
@@ -499,7 +576,7 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 - `BENCHMARKS.md` — replace Rails 7-era claims only with newly measured, versioned results.
 - `Rakefile` — expose non-blocking benchmark smoke tasks.
 
-**Approach:** Run Rails benchmarks under the exact target bundle, reuse Unit 15's timing/environment schema, and avoid endless sleeps. Treat benchmark smoke as functional CI evidence only; keep expensive performance measurements manual and provenance-rich.
+**Approach:** Run Rails benchmarks under the exact target bundle, reuse Unit 17's timing/environment schema, and avoid endless sleeps. Treat benchmark smoke as functional CI evidence only; keep expensive performance measurements manual and provenance-rich.
 
 **Patterns:** Preserve existing Rails benchmark entry points and job classes, using supported adapters rather than direct internal queues.
 
@@ -511,15 +588,15 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 
 **Verification:** `bundle exec rake bench:smoke` exits zero on the exact target; any published results name commit and complete environment metadata.
 
-**Planning-time unknowns:** None beyond Unit 15's deferred re-measurement decision.
+**Planning-time unknowns:** None beyond Unit 17's deferred re-measurement decision.
 
-### Unit 17: Support, Migration, and Contributor Documentation
+### Unit 19: Support, Migration, and Contributor Documentation
 
 **Goal:** Make every user/developer instruction consistent with the breaking Ruby 4/Rails 8.1 support contract and actual verified commands.
 
 **Requirements trace:** R1, R2, R4, R11, R14–R17
 
-**Dependencies:** Units 12–16.
+**Dependencies:** Units 12–18.
 
 **Files:**
 - `README.md` — publish support matrix, correct component/configuration examples, and link migration/contributor docs.
@@ -531,7 +608,7 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 - `CONTRIBUTING.md` — document exact setup, tests, style, integration, fixtures, benchmarks, and package verification.
 - `template.rb` — fix repository reference and constrain the application template to the supported release/branch behavior.
 
-**Approach:** Derive every command from passing local/CI tasks. Clearly distinguish durable versus rebuildable data, supported versus warning-only versions, automatic generator behavior versus optional Solid Cache/Queue cleanup, and upgrade versus unsupported downgrade. Correct existing API/file-name/example errors and remove unverified performance claims rather than carrying them forward.
+**Approach:** Derive every command from passing local/CI tasks. Clearly distinguish durable versus rebuildable data, supported versus warning-only versions, automatic generator behavior versus optional Solid Cache/Queue cleanup, and upgrade versus unsupported downgrade. The migration runbook requires all old Litestack processes/workers to stop before preflight, forbids rolling mixed-version access to a durable file, explains `MigrationBusyError`, checks free space/permissions/integrity, identifies retained backups, and gives rollback/restart validation steps. Correct existing API/file-name/example errors and remove unverified performance claims rather than carrying them forward.
 
 **Patterns:** Keep focused top-level project docs and add one migration guide plus one contributor guide; do not create a documentation site.
 
@@ -539,19 +616,20 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 - [ ] Happy path: a new user can install/configure/boot from README commands and an upgrader can complete the migration checklist.
 - [ ] Nil/empty input: standalone users without Rails receive a clear applicable subset rather than Rails-only steps.
 - [ ] Error path: migration recovery instructions cover failed preflight, backup, schema step, and application smoke.
+- [ ] Error path: concurrent or unquiesced deployment instructions stop before mutation and explain how to identify/retry the lock owner safely.
 - [ ] Edge case: every referenced path/command/version exists and matches package/CI metadata.
 
 **Verification:** Run link/path/command snippet checks plus a manual diff against package metadata; the Rails app smoke uses the same documented generator and validation commands.
 
-**Planning-time unknowns:** None; exact release number placeholders remain only until Unit 18 and are mechanically replaced there.
+**Planning-time unknowns:** None; exact release number placeholders remain only until Unit 20 and are mechanically replaced there.
 
-### Unit 18: Breaking Release Readiness
+### Unit 20: Breaking Release Readiness
 
 **Goal:** Produce an internally consistent, install-tested 1.0.0 release candidate without publishing it externally.
 
 **Requirements trace:** R1–R4, R11–R16
 
-**Dependencies:** Units 13 and 17 (and transitively all earlier units).
+**Dependencies:** Units 13 and 19 (and transitively all earlier units).
 
 **Files:**
 - `lib/litestack/version.rb` — set the release candidate version to 1.0.0.
@@ -580,35 +658,70 @@ Verification has three layers: component Minitest contracts, a built-gem Rails 8
 ```text
 U1 → U2 → U3 ─┬→ U4 ─┐
               ├→ U5  │
-              ├→ U6  ├→ U8 ───────────┐
+              ├→ U6  ├→ U8 ──────────┐
               └→ U7 ─┘                │
-U2,U3 → U9 → U10,U11 ─────────────────┼→ U12 → U13 ─┐
-U1,U2,U3 → U14 → U15 → U16 ───────────┘             ├→ U18
-U12,U13,U14,U15,U16 → U17 ──────────────────────────┘
+U2,U3 → U9 → U10,U11 ────────────────┘→ U12 ──────────┐
+           └→ U14 → U15 ─────────────────────├→ U13 ─┐
+U1,U2,U3 → U16 → U17 ─┬─────────────────────┐ │       │
+U4,U5,U6,U7,U17 → U18 ─┘                         ├→ U19 ─┘
+U12,U13,U14,U15,U16,U17,U18 ─────────────────────┘
+U13,U19 → U20
 ```
 
 ## Requirements Coverage
 
 | Requirement | Units |
 |-------------|-------|
-| R1 | 1, 2, 3, 13–15, 17, 18 |
-| R2 | 1, 4–8, 12, 13, 16–18 |
+| R1 | 1–3, 13, 14, 16, 17, 19, 20 |
+| R2 | 1, 4–8, 12, 13, 18–20 |
 | R3 | 1, 13 |
-| R4 | 2–18 |
+| R4 | 2–20 |
 | R5 | 4, 12 |
 | R6 | 5, 12 |
-| R7 | 6, 12, 16 |
+| R7 | 6, 12, 18 |
 | R8 | 7, 12 |
 | R9 | 4, 8, 12 |
 | R10 | 3, 5–7, 9, 12 |
-| R11 | 9–12, 17, 18 |
+| R11 | 9–12, 19, 20 |
 | R12 | 8, 12, 13 |
-| R13 | 2, 10, 11, 13 |
-| R14 | 1, 2, 12, 13, 17, 18 |
-| R15 | 1, 13, 17, 18 |
-| R16 | 8, 17, 18 |
-| R17 | 14–17 |
-| R18 | 3–9, 12 |
+| R13 | 2, 10, 11, 13–15 |
+| R14 | 1, 2, 12–14, 19, 20 |
+| R15 | 1, 13, 19, 20 |
+| R16 | 8, 14, 15, 19, 20 |
+| R17 | 16–19 |
+| R18 | 3–9, 12, 14, 15 |
+
+## Engineering Review Record
+
+### 1. Scope Challenge
+
+The plan holds the confirmed product scope: all existing public components, Ruby 4/Rails 8.1 compatibility, durable upgrade safety, delivery evidence, and a 1.0.0 release candidate. The review did not add a new service, UI feature, compatibility shim, downgrade path, Rails 7 path, performance promise, or publication action. Minimum-version proof, migration locking, Litesearch destructive-change protection, Sequel verification, and Liteboard CSP/local assets are structural work required to make already accepted support, safety, integration, and UI claims true.
+
+### 2. Architecture
+
+The gem remains standalone-first. Rails version enforcement runs only at Railtie/adapter entry points; it does not create a Rails runtime dependency. Framework adapters stay thin and are tested against their public host interfaces. Durable SQL YAML evolution and Litesearch destructive schema work share one migrator/protection boundary. Upgrade correctness requires an operator quiescence precondition, a process advisory lock, a bounded database write lock, an online verified snapshot, one outer transaction with per-step savepoints, and post-migration integrity checks. No lock is claimed to detect an idle old binary that does not participate in the protocol.
+
+### 3. Code Quality
+
+New failure modes use named errors (`UnsupportedFrameworkVersionError`, `ClosedError`, `ShutdownTimeoutError`, `MigrationBusyError`, migration/backup errors, and Liteboard request/render errors) rather than broad rescues. Packaged migration YAML is safely parsed and structurally validated. Structured events have bounded, non-secret payloads. Liteboard removes `eval`, remote mutable assets, inline executable code, and rescue-as-default view expressions; its local assets and self-only CSP keep the packaged executable deterministic offline. Existing style debt may be narrowly excluded, but every changed production file and all new tests are inside the Ruby 4 Standard gate.
+
+### 4. Test Review
+
+Legend: `●` explicit new/expanded contract, `○` existing suite retained under the corrected harness, `—` intentionally not applicable.
+
+| Public surface | Standalone/Ruby 4 | Framework contract | Durable 0.4.3/0.4.5 | Built/package proof |
+|----------------|-------------------|--------------------|---------------------|---------------------|
+| Litedb | ● Unit 4 | ● Rails AR + dbconsole, Unit 4 | ● Units 10–11 | ● Units 12–13 |
+| Litecache | ● Unit 5 | ● Rails cache, Unit 5 | — rebuildable | ● Units 12–13 |
+| Litejob | ● Unit 6 | ● Active Job, Unit 6 | ● Units 10–11 | ● Units 12–13 |
+| Litecable | ● Unit 7 | ● Action Cable, Unit 7 | — rebuildable | ● Units 12–13 |
+| Litesearch | ○ full suite + ● Unit 9 | ● AR/Sequel search, Unit 4 | ● Units 10–11 | ● Unit 13 public require |
+| Litemetric | ● Unit 3 | — no Rails adapter | ● Units 10–11 | ● Units 14–15 and package |
+| LiteKD | ○ `test/test_litekd.rb` | — no Rails adapter | ● Units 10–11 | ● Unit 13 public require |
+| Liteboard | ● Units 14–15 | ● Rack 3 contract | — reads metrics | ● Unit 13 executable |
+| Shared lifecycle | ● Unit 3 | ● Units 4–8, 12 | ● migration failure paths | ● double shutdown |
+
+The harness targets 100% line/branch coverage for new compatibility files and materially changed branches while preventing aggregate regression. Deliberately unclaimed areas are downgrade behavior, Rails 7/Rails 9 support, cross-browser automation beyond the named browser smoke, and pre-measurement performance thresholds. Every accepted public surface has a success, nil/empty, error, and edge path at the nearest useful layer.
 
 ## Quality Bar Checklist
 
@@ -616,7 +729,7 @@ U12,U13,U14,U15,U16 → U17 ─────────────────�
 - [x] Dependencies form a DAG with no cycles.
 - [x] Every unit has at least three named test scenarios, including error/edge behavior.
 - [x] No unit touches more than eight files.
-- [x] No unit introduces more than two new abstractions; Unit 9 adds one migrator and Unit 12 adds one app builder.
+- [x] No unit introduces more than two new abstractions; Unit 1 adds one compatibility check, Unit 9 adds one migrator, and Unit 12 adds one app builder.
 - [x] Every planning-time unknown is classified as `Resolve Before Planning` or `Deferred to Planning`.
 - [x] Every Must Have requirement is covered by at least two verification layers where its risk warrants it.
 - [x] Handoff completeness: implementation must choose mechanical details, but no component scope, support policy, data-loss policy, generator deletion behavior, or external publishing behavior remains to be invented.
