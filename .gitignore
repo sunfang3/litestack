@@ -15,3 +15,8 @@ Gemfile.lock
 
 # Built gem artifacts
 *.gem
+
+# wangfenjin/simple FTS5 tokenizer (fetch via scripts/fetch_simple.rb)
+/vendor/simple/**/*.so
+/vendor/simple/**/*.dylib
+/vendor/simple/**/*.dll

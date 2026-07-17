@@ -50,6 +50,21 @@ class Litesearch::Schema::BasicAdapter
     Litesearch::Schema::TOKENIZERS[@schema[:tokenizer]]
   end
 
+  # FTS5 table-valued function argument for search/count.
+  # Built-in tokenizers: bind :term directly.
+  # :simple tokenizer: wrap with simple_query/jieba_query so CJK/pinyin work.
+  def fts_query_expr
+    if @schema[:tokenizer] == :simple
+      case (@schema[:query_builder] || :simple).to_sym
+      when :jieba then "jieba_query(:term)"
+      when :raw then ":term"
+      else "simple_query(:term)"
+      end
+    else
+      ":term"
+    end
+  end
+
   def order_fields(old_schema)
     new_fields = {}
     old_field_names = old_schema.schema[:fields].keys
@@ -84,7 +99,8 @@ class Litesearch::Schema::BasicAdapter
     @sql[:create_vocab_tables] = :create_vocab_tables_sql
     @sql[:insert] = "INSERT OR REPLACE INTO #{name}(rowid, #{active_col_names_sql}) VALUES (:rowid, #{active_col_names_var_sql}) RETURNING rowid"
     @sql[:delete] = "DELETE FROM #{name} WHERE rowid = :rowid"
-    @sql[:count] = "SELECT count(*) FROM #{name}(:term)"
+    q = fts_query_expr
+    @sql[:count] = "SELECT count(*) FROM #{name}(#{q})"
     @sql[:count_all] = "SELECT count(*) FROM #{name}"
     @sql[:delete_all] = "DELETE FROM #{name}"
     @sql[:drop] = "DROP TABLE #{name}"
@@ -93,10 +109,10 @@ class Litesearch::Schema::BasicAdapter
     @sql[:ranks] = :ranks_sql
     @sql[:set_config_value] = "INSERT OR REPLACE INTO #{name}_config(k, v) VALUES (:key, :value)"
     @sql[:get_config_value] = "SELECT v FROM #{name}_config WHERE k = :key"
-    @sql[:search] = "SELECT rowid, -rank AS search_rank FROM #{name}(:term) WHERE rank !=0 ORDER BY rank LIMIT :limit OFFSET :offset"
+    @sql[:search] = "SELECT rowid, -rank AS search_rank FROM #{name}(#{q}) WHERE rank !=0 ORDER BY rank LIMIT :limit OFFSET :offset"
     @sql[:similarity_terms] = "SELECT DISTINCT term FROM #{name}_instance WHERE doc = :rowid AND FLOOR(term) IS NULL AND LENGTH(term) > 2 AND NOT instr(term, ' ') AND NOT instr(term, '-') AND NOT instr(term, ':') AND NOT instr(term, '#') AND NOT instr(term, '_') LIMIT 15"
     @sql[:similarity_query] = "SELECT group_concat(term, ' OR ') FROM #{name}_row WHERE term IN (#{@sql[:similarity_terms]})"
-    @sql[:similarity_search] = "SELECT rowid, -rank AS search_rank FROM #{name}(:term) WHERE rowid != :rowid ORDER BY rank LIMIT :limit"
+    @sql[:similarity_search] = "SELECT rowid, -rank AS search_rank FROM #{name}(#{q}) WHERE rowid != :rowid ORDER BY rank LIMIT :limit"
     @sql[:similar] = "SELECT rowid, -rank AS search_rank FROM #{name} WHERE #{name} = (#{@sql[:similarity_query]}) AND rowid != :rowid ORDER BY rank LIMIT :limit"
     @sql[:update_index] = "UPDATE sqlite_schema SET sql = :sql WHERE name = '#{name}'"
     @sql[:update_content_table] = "UPDATE sqlite_schema SET sql = :sql WHERE name = '#{name}_content'"

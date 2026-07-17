@@ -5,8 +5,17 @@ class Litesearch::Schema
     porter: "porter unicode61 remove_diacritics 2",
     unicode: "unicode61 remove_diacritics 2",
     ascii: "ascii",
-    trigram: "trigram"
+    trigram: "trigram",
+    # Requires wangfenjin/simple extension (see Litesearch::SimpleExtension).
+    # tokenize='simple' indexes CJK n-grams + pinyin; search uses simple_query() by default.
+    simple: "simple"
   }
+
+  # How user text is turned into an FTS5 MATCH expression when tokenizer is :simple.
+  # :simple → simple_query(?)  (Chinese + pinyin, recommended)
+  # :jieba  → jieba_query(?)   (phrase-oriented; needs jieba dict next to libsimple)
+  # :raw    → plain :term      (caller supplies FTS5 syntax)
+  QUERY_BUILDERS = %i[simple jieba raw].freeze
 
   INDEX_TYPES = {
     standalone: Litesearch::Schema::StandaloneAdapter,
@@ -21,6 +30,7 @@ class Litesearch::Schema
     table: nil,
     filter_column: nil,
     tokenizer: :porter,
+    query_builder: :simple,
     auto_create: true,
     auto_modify: true,
     rebuild_on_create: false,
@@ -69,6 +79,18 @@ class Litesearch::Schema
   def tokenizer(new_tokenizer)
     raise "Unknown tokenizer" if TOKENIZERS[new_tokenizer].nil?
     @schema[:tokenizer] = new_tokenizer
+  end
+
+  # Only meaningful with tokenizer :simple (wangfenjin/simple).
+  def query_builder(builder = nil)
+    return @schema[:query_builder] if builder.nil?
+    sym = builder.to_sym
+    raise "Unknown query_builder" unless QUERY_BUILDERS.include?(sym)
+    @schema[:query_builder] = sym
+  end
+
+  def simple_tokenizer?
+    @schema[:tokenizer] == :simple
   end
 
   def filter_column(filter_column)

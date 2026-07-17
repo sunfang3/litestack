@@ -9,7 +9,8 @@ class Litesearch::Schema::StandaloneAdapter < Litesearch::Schema::BasicAdapter
     @sql[:drop_content_table] = "DROP TABLE #{name}_content"
     @sql[:drop_content_col] = :drop_content_col_sql
     @sql[:create_content_table] = :create_content_table_sql
-    @sql[:search] = "SELECT rowid, *, -rank AS search_rank FROM #{name}(:term) WHERE rank !=0 ORDER BY rank LIMIT :limit OFFSET :offset"
+    q = fts_query_expr
+    @sql[:search] = "SELECT rowid, *, -rank AS search_rank FROM #{name}(#{q}) WHERE rank !=0 ORDER BY rank LIMIT :limit OFFSET :offset"
   end
 
   private
