@@ -36,6 +36,57 @@ namespace :scripts do
   end
 end
 
+def litestack_find_extension_binary(*glob_patterns)
+  glob_patterns.flat_map { |g| Dir[g] }.find { |p| File.file?(p) }
+end
+
+namespace :extensions do
+  desc "Fetch optional native SQLite extensions (vectorlite + wangfenjin/simple)"
+  task :fetch do
+    sh "bundle exec ruby scripts/fetch_vectorlite.rb"
+    sh "bundle exec ruby scripts/fetch_simple.rb"
+  end
+
+  desc "Run tests that require optional extensions (vector + zh/pinyin); fetches if missing"
+  task :test do
+    root = File.expand_path(__dir__)
+    vector = litestack_find_extension_binary(
+      File.join(root, "vendor/vectorlite/*/vectorlite.so"),
+      File.join(root, "vendor/vectorlite/*/vectorlite.dylib")
+    )
+    simple = litestack_find_extension_binary(
+      File.join(root, "vendor/simple/*/libsimple.so"),
+      File.join(root, "vendor/simple/*/libsimple.dylib")
+    )
+    unless vector && simple
+      Rake::Task["extensions:fetch"].invoke
+      vector = litestack_find_extension_binary(
+        File.join(root, "vendor/vectorlite/*/vectorlite.so"),
+        File.join(root, "vendor/vectorlite/*/vectorlite.dylib")
+      )
+      simple = litestack_find_extension_binary(
+        File.join(root, "vendor/simple/*/libsimple.so"),
+        File.join(root, "vendor/simple/*/libsimple.dylib")
+      )
+    end
+    abort "vectorlite binary missing after fetch" unless vector
+    abort "libsimple binary missing after fetch" unless simple
+
+    ENV["LITEVECTOR_EXTENSION_PATH"] = vector
+    ENV["LITESEARCH_SIMPLE_EXTENSION_PATH"] = simple
+    ENV["COVERAGE_PARTIAL"] = "1"
+    puts "LITEVECTOR_EXTENSION_PATH=#{vector}"
+    puts "LITESEARCH_SIMPLE_EXTENSION_PATH=#{simple}"
+
+    sh "bundle exec ruby -Ilib:test -r./test/helper " \
+       "-e 'require \"./test/test_litevector_vector\"; " \
+       "require \"./test/test_litevector_extension\"; " \
+       "require \"./test/test_litevector_index\"; " \
+       "require \"./test/test_litevector_ar_model\"; " \
+       "require \"./test/test_litesearch_simple_zh_pinyin\"'"
+  end
+end
+
 namespace :bench do
   desc "Finite benchmark smoke (non-blocking)"
   task :smoke do

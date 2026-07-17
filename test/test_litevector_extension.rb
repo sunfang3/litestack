@@ -36,16 +36,14 @@ class TestLitevectorExtension < Minitest::Test
   def test_missing_raises_named_error
     Litevector.reset_configuration!
     ENV.delete("LITEVECTOR_EXTENSION_PATH")
-    # Point platform vendor to empty by forcing a nonsense path only
     Litevector.extension_path = "/nonexistent/vectorlite.so"
-    # Still may find vendored binary — skip if available via vendor
-    if VectorliteHelper.available? && Litevector::Extension.vendored_candidates.any? { |p| File.file?(p) }
-      skip "vendored binary present; cannot assert missing"
+    # Stub vendor lookup so this asserts the missing path even when binaries are installed.
+    Litevector::Extension.stub(:vendored_candidates, []) do
+      err = assert_raises(Litevector::ExtensionNotFoundError) do
+        Litevector::Extension.load!(SQLite3::Database.new(":memory:"))
+      end
+      assert_match(/vectorlite binary not found/, err.message)
     end
-    err = assert_raises(Litevector::ExtensionNotFoundError) do
-      Litevector::Extension.load!(SQLite3::Database.new(":memory:"))
-    end
-    assert_match(/vectorlite binary not found/, err.message)
   end
 
   def test_load_when_binary_present

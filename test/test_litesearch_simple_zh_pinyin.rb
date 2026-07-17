@@ -93,13 +93,15 @@ class TestLitesearchSimpleZhPinyin < Minitest::Test
   def test_extension_missing_raises_named_error
     Litesearch.reset_simple_configuration!
     Litesearch.simple_extension_path = "/nonexistent/libsimple.so"
-    if SimpleExtensionHelper.available?
-      # Still may find vendor path
-      skip "vendored libsimple present"
-    end
-    db = SQLite3::Database.new(":memory:")
-    assert_raises(Litesearch::SimpleExtension::NotFoundError) do
-      Litesearch::SimpleExtension.load!(db)
+    ENV.delete("LITESEARCH_SIMPLE_EXTENSION_PATH")
+    ENV.delete("SIMPLE_EXTENSION_PATH")
+    # Stub vendor lookup so this asserts the missing path even when binaries are installed.
+    Litesearch::SimpleExtension.stub(:vendored_candidates, []) do
+      db = SQLite3::Database.new(":memory:")
+      err = assert_raises(Litesearch::SimpleExtension::NotFoundError) do
+        Litesearch::SimpleExtension.load!(db)
+      end
+      assert_match(/libsimple/, err.message)
     end
   end
 end
