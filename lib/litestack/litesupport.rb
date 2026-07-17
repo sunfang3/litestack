@@ -17,6 +17,34 @@ require_relative "liteconnection"
 module Litesupport
   class Error < StandardError; end
 
+  class << self
+    # Explicit data root (issue #34). Takes precedence over ENV when set.
+    # Prefer: Litesupport.data_path = "storage" or config.litestack.data_path in Rails.
+    attr_reader :configured_data_path
+
+    def data_path=(value)
+      @configured_data_path = value&.to_s
+      # Do not cache environment forever across reconfigure (tests / dotenv reload).
+      @environment = nil
+    end
+
+    def data_path
+      return configured_data_path unless configured_data_path.nil? || configured_data_path.empty?
+      env = ENV["LITESTACK_DATA_PATH"]
+      (env && !env.empty?) ? env : nil
+    end
+
+    def configure
+      yield self if block_given?
+      self
+    end
+
+    def reset_configuration!
+      @configured_data_path = nil
+      @environment = nil
+    end
+  end
+
   # Detect the Rack or Rails environment.
   def self.detect_environment
     if defined?(Rails) && Rails.respond_to?(:env)
@@ -35,26 +63,33 @@ module Litesupport
   end
 
   # Databases will be stored by default at this path.
+  # Always re-resolves data_path / ENV so dotenv-late ENV is honored (issue #91)
+  # as long as component DEFAULT_OPTIONS use lazy procs (see Liteconnection#configure).
   def self.root(env = Litesupport.environment)
     ensure_root_volume detect_root(env)
   end
 
   # Default path where we'll store all of the databases.
   def self.detect_root(env)
-    path = if ENV["LITESTACK_DATA_PATH"]
-      ENV["LITESTACK_DATA_PATH"]
-    elsif defined? Rails
+    path = if (base = data_path)
+      base
+    elsif defined?(Rails)
       "./db"
     else
       "."
     end
 
-    Pathname.new(path).join(env)
+    Pathname.new(path).join(env.to_s)
   end
 
   def self.ensure_root_volume(path)
     FileUtils.mkdir_p path unless path.exist?
     path
+  end
+
+  # Resolve procs in option hashes at configuration/init time, not at class load.
+  def self.resolve_options(hash)
+    hash.transform_values { |v| v.respond_to?(:call) ? v.call : v }
   end
 
   class Pool

@@ -127,7 +127,10 @@ module Litesupport
       rescue
         {}
       end
-      @options = defaults.merge(options)
+      # Resolve lazy defaults (e.g. path: -> { Litesupport.root.join(...) }) at
+      # *instance* configuration time so LITESTACK_DATA_PATH / Litesupport.data_path
+      # set after require (dotenv, Rails initializers) are honored (issues #91, #34).
+      @options = Litesupport.resolve_options(defaults).merge(Litesupport.resolve_options(options))
       config = begin
         YAML.safe_load(ERB.new(File.read(@options[:config_path])).result)
       rescue
@@ -139,9 +142,11 @@ module Litesupport
           config[k.to_sym] = config[k]
           config.delete k
         end
-        @options.merge!(config)
+        @options.merge!(Litesupport.resolve_options(config.transform_keys(&:to_sym)))
       end
-      @options.merge!(options)
+      @options.merge!(Litesupport.resolve_options(options))
+      # Final pass: path may still be a proc if nested
+      @options[:path] = @options[:path].call if @options[:path].respond_to?(:call)
     end
 
     def setup

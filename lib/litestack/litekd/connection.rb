@@ -4,7 +4,7 @@ module Litekd
     include Litesupport::Liteconnection
     
     DEFAULT_OPTIONS = {
-      path: Litesupport.root.join("kd.sqlite3"),
+      path: -> { Litesupport.root.join("kd.sqlite3") },
       sync: 1,
       mmap_size: 16 * 1024 * 1024, # 16MB
     }

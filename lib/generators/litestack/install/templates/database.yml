@@ -32,8 +32,11 @@ test:
 # Warning: Make sure your production database path is on a persistent
 # volume, otherwise your application data could be deleted between deploys.
 #
-# You may also set the Litesupport.root in production via the
-# `LITESTACK_DATA_PATH` environment variable.
+# Data root (pick one; evaluated when the DB opens, not at gem require):
+#   ENV["LITESTACK_DATA_PATH"] = "/var/lib/myapp"
+#   # config/application.rb or an initializer:
+#   config.litestack.data_path = Rails.root.join("storage")
+#   # or: Litesupport.data_path = Rails.root.join("storage")
 production:
   <<: *default
   database: <%= Litesupport.root("production").join("data.sqlite3") %>

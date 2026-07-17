@@ -7,6 +7,17 @@ require "rails/railtie"
 
 module Litestack
   class Railtie < ::Rails::Railtie
+    # Application config for Litestack (issue #34):
+    #   config.litestack.data_path = Rails.root.join("storage")
+    config.litestack = ActiveSupport::OrderedOptions.new
+    config.litestack.data_path = nil
+
+    # Run early so Litesupport.root resolves correctly before components open DBs.
+    initializer "litestack.configure_data_path", before: :load_config_initializers do |app|
+      path = app.config.litestack.data_path
+      Litesupport.data_path = path if path && !path.to_s.empty?
+    end
+
     initializer :litestack_disable_production_sqlite_warning do |app|
       ActiveSupport.on_load(:active_record) do
         if app.config.active_record.respond_to?(:sqlite3_production_warning=)

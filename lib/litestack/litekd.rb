@@ -7,14 +7,14 @@ require "bigdecimal"
 
 module Litekd
   DEFAULT_OPTIONS = {
-    path: Litesupport.root.join("kd.sqlite3"),
+    path: -> { Litesupport.root.join("kd.sqlite3") },
     sync: 1,
     mmap_size: 32 * 1024 * 1024 # 32MB
   }
 
   def self.connection
-    # configuration should be loaded here
-    @@connection ||= Litekd::Connection.new(DEFAULT_OPTIONS.merge(options))
+    # Resolve paths at connection time (not class load) so data_path/ENV apply.
+    @@connection ||= Litekd::Connection.new(Litesupport.resolve_options(DEFAULT_OPTIONS).merge(options))
   end
 
   def self.options
@@ -23,6 +23,15 @@ module Litekd
 
   def self.configure(options = {})
     @@options = options
+    # Allow re-binding connection after path configuration changes
+    if class_variable_defined?(:@@connection)
+      begin
+        @@connection.close if @@connection.respond_to?(:close)
+      rescue
+        nil
+      end
+      @@connection = nil
+    end
   end
 
   def self.clear!
