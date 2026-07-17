@@ -205,16 +205,18 @@ module Litesearch::Model
         end
         @schema_not_created = false
       end
+      if @schema&.schema&.[](:tokenizer) == :simple
+        Litesearch::SimpleExtension.load!(get_connection)
+      end
       # Bind the FTS query string — never interpolate into SQL (issue #143).
       # sanitize_sql_array quotes the value as a SQL literal so user input cannot
       # break out of MATCH '…' and inject arbitrary SQL. FTS5 operators remain
       # available inside the bound query; apostrophes are normalized because
       # unquoted FTS5 tokens cannot contain raw "'" (see SQLite FTS5 syntax).
+      # For tokenizer :simple, MATCH uses simple_query(?) / jieba_query(?).
       fts_query = prepare_fts_match_query(term)
-      match_join = sanitize_sql_array([
-        "INNER JOIN #{index_name} ON #{table_name}.rowid = #{index_name}.rowid AND rank != 0 AND #{index_name} MATCH ?",
-        fts_query
-      ])
+      match_sql = ar_match_sql_template
+      match_join = sanitize_sql_array([match_sql, fts_query])
       select("#{table_name}.*")
         .joins(match_join)
         .select("-#{index_name}.rank AS search_rank")
@@ -229,6 +231,7 @@ module Litesearch::Model
     # them and other non-FTS punctuation so hostile input cannot break SQL
     # *or* crash the query layer. Intentional FTS operators
     # (AND/OR/NOT, *, ^, :, (), "", +) are preserved when well-formed.
+    # CJK letters are kept via \p{L}.
     def prepare_fts_match_query(term)
       s = term.to_s.tr("'", " ")
       s = s.gsub(/[^\p{L}\p{N}_\+\*\^\(\):"\s]/u, " ")
@@ -240,6 +243,23 @@ module Litesearch::Model
       tokens.join(" ")
     end
     private :prepare_fts_match_query
+
+    def ar_match_sql_template
+      base = "INNER JOIN #{index_name} ON #{table_name}.rowid = #{index_name}.rowid AND rank != 0 AND #{index_name} MATCH "
+      tok = @schema&.schema&.[](:tokenizer)
+      if tok == :simple
+        builder = (@schema.schema[:query_builder] || :simple).to_sym
+        expr = case builder
+        when :jieba then "jieba_query(?)"
+        when :raw then "?"
+        else "simple_query(?)"
+        end
+        base + expr
+      else
+        base + "?"
+      end
+    end
+    private :ar_match_sql_template
 
     def create_instance(row)
       instantiate(row)
@@ -274,14 +294,30 @@ module Litesearch::Model
     end
 
     def search(term)
+      qexpr = sequel_fts_query_expr
       dataset.select(
         Sequel.lit("#{table_name}.*, -#{index_name}.rank AS search_rank")
       ).inner_join(
-        Sequel.lit("#{index_name}(:term) ON #{table_name}.rowid = #{index_name}.rowid AND rank != 0", {term: term})
+        Sequel.lit("#{index_name}(#{qexpr}) ON #{table_name}.rowid = #{index_name}.rowid AND rank != 0", {term: term})
       ).order(
         Sequel.lit("rank")
       )
     end
+
+    def sequel_fts_query_expr
+      tok = @schema&.schema&.[](:tokenizer)
+      if tok == :simple
+        builder = (@schema.schema[:query_builder] || :simple).to_sym
+        case builder
+        when :jieba then "jieba_query(:term)"
+        when :raw then ":term"
+        else "simple_query(:term)"
+        end
+      else
+        ":term"
+      end
+    end
+    private :sequel_fts_query_expr
 
     def create_instance(row)
       # we need to convert keys to symbols first!

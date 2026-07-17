@@ -20,3 +20,8 @@ Gemfile.lock
 /vendor/vectorlite/**/*.so
 /vendor/vectorlite/**/*.dylib
 /vendor/vectorlite/**/*.dll
+
+# wangfenjin/simple FTS5 tokenizer (fetch via scripts/fetch_simple.rb)
+/vendor/simple/**/*.so
+/vendor/simple/**/*.dylib
+/vendor/simple/**/*.dll

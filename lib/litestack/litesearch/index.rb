@@ -22,6 +22,7 @@ class Litesearch::Index
       schema.schema[:name] = name
       yield schema
       schema.post_init
+      ensure_tokenizer_extension!(schema)
       # now that we have a schema object we need to check if we need to create or modify and existing index
       if @db.transaction_active?
         if exists?(name)
@@ -44,6 +45,7 @@ class Litesearch::Index
       end
     elsif exists?(name)
       load_index(name)
+      ensure_tokenizer_extension!(@schema) if @schema
       prepare_statements
     # an index already exists, load it from the database and return the index instance to the caller
     else
@@ -101,6 +103,7 @@ class Litesearch::Index
   # offset: start from which record
   def search(term, options = {})
     options = DEFAULT_SEARCH_OPTIONS.merge(options)
+    ensure_tokenizer_extension!(@schema) if @schema
     rs = @stmts[:search].execute(term, options[:limit], options[:offset])
     generate_results(rs)
   end
@@ -151,6 +154,14 @@ class Litesearch::Index
     end
     result
   end
+
+  def ensure_tokenizer_extension!(schema)
+    return unless schema
+    tok = schema.respond_to?(:get) ? schema.get(:tokenizer) : schema.schema[:tokenizer]
+    return unless tok == :simple
+    Litesearch::SimpleExtension.load!(@db)
+  end
+  private :ensure_tokenizer_extension!
 
   def exists?(name)
     @db.get_first_value("SELECT count(*) FROM SQLITE_MASTER WHERE name = ? AND type = 'table' AND (sql like '%fts5%' OR sql like '%FTS5%')", name.to_s) == 1

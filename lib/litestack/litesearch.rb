@@ -4,12 +4,19 @@ module Litesearch
   class Schema; end
 end
 
+require_relative "litesearch/simple_extension"
 require_relative "litesearch/index"
 require_relative "litesearch/model"
 
 module Litesearch
   def litesearch_index_cache
     @litesearch_index_cache ||= {}
+  end
+
+  # Ensure wangfenjin/simple is loaded (Chinese + Pinyin FTS5 tokenizer).
+  def ensure_simple_tokenizer!
+    Litesearch::SimpleExtension.load!(self)
+    self
   end
 
   def search_index(name)

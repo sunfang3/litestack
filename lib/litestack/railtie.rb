@@ -14,6 +14,9 @@ module Litestack
     # Optional path to vectorlite native extension (Litevector).
     #   config.litestack.vector_extension_path = Rails.root.join("vendor/vectorlite/linux-x86_64/vectorlite.so")
     config.litestack.vector_extension_path = nil
+    # Optional path to wangfenjin/simple (libsimple) for Chinese + Pinyin FTS.
+    #   config.litestack.simple_extension_path = Rails.root.join("vendor/simple/linux-x86_64/libsimple.so")
+    config.litestack.simple_extension_path = nil
 
     # Run early so Litesupport.root resolves correctly before components open DBs.
     initializer "litestack.configure_data_path", before: :load_config_initializers do |app|
@@ -26,6 +29,13 @@ module Litestack
       next if path.nil? || path.to_s.empty?
       require "litestack/litevector"
       Litevector.extension_path = path.to_s
+    end
+
+    initializer "litestack.configure_simple_tokenizer", after: "litestack.configure_data_path" do |app|
+      path = app.config.litestack.simple_extension_path
+      next if path.nil? || path.to_s.empty?
+      require "litestack/litesearch"
+      Litesearch.simple_extension_path = path.to_s
     end
 
     initializer :litestack_disable_production_sqlite_warning do |app|
