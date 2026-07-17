@@ -40,6 +40,7 @@ class TestInstallGenerator < Minitest::Test
       end
     RUBY
     File.write(File.join(@root, ".gitignore"), "/log/*\n")
+    File.write(File.join(@root, ".dockerignore"), "/log\n/tmp\n")
   end
 
   def teardown
@@ -58,19 +59,35 @@ class TestInstallGenerator < Minitest::Test
     cable = File.read(File.join(@root, "config/cable.yml"))
     prod = File.read(File.join(@root, "config/environments/production.rb"))
     git = File.read(File.join(@root, ".gitignore"))
+    docker = File.read(File.join(@root, ".dockerignore"))
 
     assert_match(/adapter:\s*litedb/, db)
     assert_match(/adapter:\s*litecable/, cable)
     assert_match(/cache_store = :litecache/, prod)
     assert_match(/queue_adapter = :litejob/, prod)
     assert_match(/sqlite3/, git)
+    # issue #119: same SQLite exclusions in .dockerignore
+    assert_match(%r{/db/\*\*/\*\.sqlite3}, docker)
+    assert_match(%r{/db/\*\*/\*\.sqlite3-\*}, docker)
+    assert_match(/Ignore default Litestack SQLite databases/, docker)
   end
 
   def test_idempotent_second_run
     run_generator
     run_generator
     git = File.read(File.join(@root, ".gitignore"))
+    docker = File.read(File.join(@root, ".dockerignore"))
     assert_equal 1, git.scan("Ignore default Litestack SQLite databases").size
+    assert_equal 1, docker.scan("Ignore default Litestack SQLite databases").size
+  end
+
+  def test_dockerignore_absent_is_skipped_safely
+    FileUtils.rm_f(File.join(@root, ".dockerignore"))
+    run_generator
+    refute File.exist?(File.join(@root, ".dockerignore")),
+      "generator must not create .dockerignore when missing"
+    git = File.read(File.join(@root, ".gitignore"))
+    assert_match(%r{/db/\*\*/\*\.sqlite3}, git)
   end
 
   def test_multi_database_preserves_entries

@@ -85,22 +85,26 @@ class Litestack::InstallGenerator < Rails::Generators::Base
   end
 
   def modify_gitignore
-    gitignore = File.join(destination_root, ".gitignore")
-    return unless File.exist?(gitignore)
+    append_sqlite_ignore_patterns(
+      ".gitignore",
+      marker: "# Ignore default Litestack SQLite databases."
+    )
+  end
 
-    content = File.read(gitignore)
-    marker = "# Ignore default Litestack SQLite databases."
-    if content.include?(marker) || content.include?("/db/**/*.sqlite3")
-      say_status :skip, ".gitignore already ignores Litestack SQLite files", :yellow
+  # Rails 7.1+ ships a default Dockerfile + .dockerignore; keep pack excludes
+  # aligned with .gitignore so development SQLite files are not baked into images
+  # (https://github.com/oldmoe/litestack/issues/119).
+  def modify_dockerignore
+    dockerignore = File.join(destination_root, ".dockerignore")
+    unless File.exist?(dockerignore)
+      say_status :skip, ".dockerignore not present (nothing to update)", :yellow
       return
     end
 
-    append_file ".gitignore", <<~TEXT
-
-      #{marker}
-      /db/**/*.sqlite3
-      /db/**/*.sqlite3-*
-    TEXT
+    append_sqlite_ignore_patterns(
+      ".dockerignore",
+      marker: "# Ignore default Litestack SQLite databases."
+    )
   end
 
   def print_optional_solid_cleanup
@@ -113,6 +117,28 @@ class Litestack::InstallGenerator < Rails::Generators::Base
   end
 
   private
+
+  SQLITE_IGNORE_PATTERNS = [
+    "/db/**/*.sqlite3",
+    "/db/**/*.sqlite3-*"
+  ].freeze
+
+  def append_sqlite_ignore_patterns(relative_path, marker:)
+    path = File.join(destination_root, relative_path)
+    return unless File.exist?(path)
+
+    content = File.read(path)
+    if content.include?(marker) || content.include?("/db/**/*.sqlite3")
+      say_status :skip, "#{relative_path} already ignores Litestack SQLite files", :yellow
+      return
+    end
+
+    append_file relative_path, <<~TEXT
+
+      #{marker}
+      #{SQLITE_IGNORE_PATTERNS.join("\n")}
+    TEXT
+  end
 
   def multi_database_config?(content)
     content.scan(/^\s*\w+:/).size > 6 || content.include?("primary:")
@@ -130,3 +156,4 @@ class Litestack::InstallGenerator < Rails::Generators::Base
     end
   end
 end
+

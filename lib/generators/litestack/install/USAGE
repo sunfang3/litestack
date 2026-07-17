@@ -7,6 +7,7 @@ Description:
       - production cache_store → :litecache
       - production active_job.queue_adapter → :litejob
       - .gitignore → SQLite database files under db/
+      - .dockerignore → same SQLite exclusions when the file exists (Rails 7.1+ default)
 
     Does NOT automatically remove solid_cache, solid_queue, their migrations, or Gemfile lines.
     Optional cleanup steps are printed after install. See docs/MIGRATING_TO_RUBY4_RAILS81.md.
