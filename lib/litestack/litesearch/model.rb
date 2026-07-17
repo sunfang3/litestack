@@ -82,6 +82,9 @@ module Litesearch::Model
 
     def drop_index!
       get_connection.search_index(index_name).drop!
+    rescue RuntimeError => e
+      raise unless e.message.include?("index does not exist")
+      # no-op when the index was never created for this connection/schema cycle
     end
 
     def similar(rowid, limit = 10)
@@ -202,16 +205,41 @@ module Litesearch::Model
         end
         @schema_not_created = false
       end
-      self.select(
-        "#{table_name}.*"
-      ).joins(
-        "INNER JOIN #{index_name} ON #{table_name}.rowid = #{index_name}.rowid AND rank != 0 AND #{index_name} MATCH ", Arel.sql("'#{term}'")
-      ).select(
-        "-#{index_name}.rank AS search_rank"
-      ).order(
-        Arel.sql("#{index_name}.rank")
-      )
+      # Bind the FTS query string — never interpolate into SQL (issue #143).
+      # sanitize_sql_array quotes the value as a SQL literal so user input cannot
+      # break out of MATCH '…' and inject arbitrary SQL. FTS5 operators remain
+      # available inside the bound query; apostrophes are normalized because
+      # unquoted FTS5 tokens cannot contain raw "'" (see SQLite FTS5 syntax).
+      fts_query = prepare_fts_match_query(term)
+      match_join = sanitize_sql_array([
+        "INNER JOIN #{index_name} ON #{table_name}.rowid = #{index_name}.rowid AND rank != 0 AND #{index_name} MATCH ?",
+        fts_query
+      ])
+      select("#{table_name}.*")
+        .joins(match_join)
+        .select("-#{index_name}.rank AS search_rank")
+        .order(Arel.sql("#{index_name}.rank"))
     end
+
+    # Normalize user text into an FTS5 MATCH query string (not SQL).
+    # SQL safety is handled separately via bound parameters in #search.
+    #
+    # Apostrophes cannot appear inside unquoted FTS5 tokens and would raise
+    # "fts5: syntax error" after SQL binding (issue #143 discussion). We strip
+    # them and other non-FTS punctuation so hostile input cannot break SQL
+    # *or* crash the query layer. Intentional FTS operators
+    # (AND/OR/NOT, *, ^, :, (), "", +) are preserved when well-formed.
+    def prepare_fts_match_query(term)
+      s = term.to_s.tr("'", " ")
+      s = s.gsub(/[^\p{L}\p{N}_\+\*\^\(\):"\s]/u, " ")
+      s = s.delete('"') if s.count('"').odd?
+      tokens = s.split(/\s+/).reject(&:empty?)
+      boolean = %w[AND OR NOT]
+      tokens.pop while tokens.last && boolean.include?(tokens.last.upcase)
+      tokens.shift while tokens.first && boolean.include?(tokens.first.upcase)
+      tokens.join(" ")
+    end
+    private :prepare_fts_match_query
 
     def create_instance(row)
       instantiate(row)
