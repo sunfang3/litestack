@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "oj"
 
 module Litestack
   class OutboxError < RuntimeError; end
@@ -17,13 +18,13 @@ module Litestack
   # Outside an open AR transaction, callers fall back to the normal LiteJob
   # connection pool (still co-located on the same file when database: primary).
   module Outbox
-    PUSH_SQL = <<~SQL.freeze
-      INSERT INTO queue(id, name, fire_at, value)
-      VALUES (hex(randomblob(32)), ?, (unixepoch('subsec') + ?), ?)
-      RETURNING id, name
-    SQL
-
     module_function
+
+    def push_sql(table_name)
+      "INSERT INTO #{table_name}(id, name, fire_at, value) " \
+        "VALUES (hex(randomblob(32)), ?, (unixepoch('subsec') + ?), ?) " \
+        "RETURNING id, name"
+    end
 
     def active_raw_connection(options)
       return nil unless outbox_enabled?(options)
@@ -64,11 +65,19 @@ module Litestack
 
     # Insert a LiteQueue-format row on +raw+ (already inside AR's transaction).
     # Returns [id, queue_name].
-    def push_litequeue(raw, value:, delay: 0, queue: "default", notify: false, extension_path: nil)
+    def push_litequeue(raw, value:, delay: 0, queue: "default", notify: false,
+      extension_path: nil, table_name: "queue")
       q = queue || "default"
       delay_f = delay.to_f
       delay_f = 0 if delay_f.negative?
-      row = raw.get_first_row(PUSH_SQL, [q, delay_f, value])
+      table = table_name.to_s
+      table = "queue" if table.empty?
+      # Identifier only — never interpolate user input into table_name.
+      unless table.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
+        raise OutboxError, "invalid queue table name #{table.inspect}"
+      end
+
+      row = raw.get_first_row(push_sql(table), [q, delay_f, value])
       raise OutboxError, "outbox push returned no row" if row.nil?
 
       if notify

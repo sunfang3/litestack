@@ -325,6 +325,7 @@ module Litesupport
 
       unless path_to_sql_file.nil?
         sql = Litestack::SchemaMigrator.load_sql_yaml(path_to_sql_file)
+        sql = transform_sql_definition(sql) if respond_to?(:transform_sql_definition, true)
         migrator = Litestack::SchemaMigrator.new(
           conn,
           path: @options[:path],

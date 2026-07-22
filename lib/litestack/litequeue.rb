@@ -3,6 +3,7 @@
 # all components should require the support module
 require_relative "litesupport"
 require_relative "wakeup"
+require_relative "sql_table_prefix"
 
 # require 'securerandom'
 
@@ -19,6 +20,8 @@ class Litequeue
   #   path: "./queue.db"
   #   mmap_size: 128 * 1024 * 1024 -> 128MB to be held in memory
   #   sync: 1 -> sync only when checkpointing
+  #   table_prefix: "" → physical table "queue"; "litestack_" → "litestack_queue"
+  #     (auto "litestack_" when Litejobqueue uses database: primary)
 
   include Litesupport::Liteconnection
 
@@ -28,7 +31,8 @@ class Litequeue
     sync: 0,
     # When true (and honker is loadable), push/repush emit notify() in the same
     # transaction so filtered wakeup backends can ignore pop/GC commits.
-    queue_notify: false
+    queue_notify: false,
+    table_prefix: nil
   }
 
   # create a new instance of the litequeue object
@@ -95,14 +99,19 @@ class Litequeue
     run_stmt(:delete, id)[0]
   end
 
+  # Physical SQLite table holding jobs (respects table_prefix).
+  def queue_table
+    @queue_table ||= Litestack::SqlTablePrefix.table_name(@options[:table_prefix])
+  end
+
   # deletes all the entries in all queues, or if a queue name is given, deletes all entries in that specific queue
   def clear(queue = nil)
-    run_sql("DELETE FROM queue WHERE iif(?1 IS NOT NULL, name = ?1,  TRUE)", queue)
+    run_sql("DELETE FROM #{queue_table} WHERE iif(?1 IS NOT NULL, name = ?1,  TRUE)", queue)
   end
 
   # returns a count of entries in all queues, or if a queue name is given, returns the count of entries in that queue
   def count(queue = nil)
-    run_sql("SELECT count(*) FROM queue WHERE iif(?1 IS NOT NULL, name = ?1, TRUE)", queue)[0][0]
+    run_sql("SELECT count(*) FROM #{queue_table} WHERE iif(?1 IS NOT NULL, name = ?1, TRUE)", queue)[0][0]
   end
 
   # Earliest fire_at still in the future for the given queue name(s).
@@ -120,7 +129,7 @@ class Litequeue
       return val&.to_f
     end
     placeholders = (["?"] * names.length).join(", ")
-    sql = "SELECT min(fire_at) FROM queue WHERE name IN (#{placeholders}) AND fire_at > unixepoch('subsec')"
+    sql = "SELECT min(fire_at) FROM #{queue_table} WHERE name IN (#{placeholders}) AND fire_at > unixepoch('subsec')"
     run_sql(sql, *names)[0][0]&.to_f
   end
 
@@ -156,6 +165,53 @@ class Litequeue
   end
 
   private
+
+  def transform_sql_definition(sql)
+    Litestack::SqlTablePrefix.apply_definition(sql, @options[:table_prefix])
+  end
+
+  # When co-located on the app primary DB, avoid PRAGMA user_version (shared with
+  # the whole file). Create IF NOT EXISTS objects without versioning.
+  def apply_schema_with_migrator(conn, sql, migrator)
+    if colocated_schema?
+      apply_schema_without_user_version!(conn, sql)
+    else
+      super
+      # Prefix change on an already-versioned file: ensure physical table exists.
+      ensure_queue_relation!(conn, sql)
+    end
+  end
+
+  def colocated_schema?
+    db = @options[:database]
+    !db.nil? && db != false && db.to_s != "litejob"
+  end
+
+  def apply_schema_without_user_version!(conn, sql)
+    schema = sql["schema"] || sql[:schema] || {}
+    schema.keys.map { |k| Integer(k) }.sort.each do |v|
+      statements = schema[v] || schema[v.to_s] || {}
+      statements.each do |name, s|
+        conn.execute(s)
+      rescue SQLite3::SQLException => e
+        raise unless e.message.match?(/already exists/i)
+      rescue => e
+        warn "Error parsing #{name}"
+        warn s
+        raise e
+      end
+    end
+  end
+
+  def ensure_queue_relation!(conn, sql)
+    exists = conn.get_first_value(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+      [queue_table]
+    )
+    return if exists
+
+    apply_schema_without_user_version!(conn, sql)
+  end
 
   def queue_notify?
     return false unless @options[:queue_notify]
@@ -214,7 +270,10 @@ class Litequeue
       # check if there is an old database and convert entries to the new format
       if conn.get_first_value("select count(*) from sqlite_master where name = '_ul_queue_'") == 1
         conn.transaction(:immediate) do
-          conn.execute("INSERT INTO queue(fire_at, name, value, created_at) SELECT fire_at, queue, value, created_at FROM _ul_queue_")
+          conn.execute(
+            "INSERT INTO #{queue_table}(fire_at, name, value, created_at) " \
+            "SELECT fire_at, queue, value, created_at FROM _ul_queue_"
+          )
           conn.execute("DROP TABLE _ul_queue_")
         end
       end

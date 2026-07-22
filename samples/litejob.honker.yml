@@ -40,6 +40,7 @@ production:
   # is one atomic COMMIT (set enqueue_after_transaction_commit false automatically).
   # database: primary
   # outbox: true
+  # table_prefix: litestack_   # → litestack_queue (default when database: primary)
 
   # Leadership GC, JobHandle#wait, durable event stream (LiteBoard feed)
   # leadership: true

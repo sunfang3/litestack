@@ -60,7 +60,25 @@ want the optional features add the block above.
 | **LiteJob wake** | `wakeup: :honker` | Sleep-interval polling | `data_version` / notify wake + deadline-aware wait |
 | **LiteJob notify filter** | `queue_notify`, `wakeup_filter_notifications` | Every commit can thrash workers | Enqueue-oriented channels only |
 | **LiteJob reliability** | `backend: :honker` | Destructive `pop` (at-most-once if kill -9) | claim / ack / visibility timeout |
-| **LiteJob outbox** | `database: :primary`, `outbox: true` | Separate queue file (dual-write) | Same SQLite file; enqueue on AR connection |
+| **LiteJob outbox** | `database: :primary`, `outbox: true` | Separate queue file (dual-write) | Same SQLite file; auto `table_prefix: litestack_` → **`litestack_queue`**; enqueue on AR connection; no `user_version` fight with the app |
+
+### Outbox / primary co-location
+
+```yaml
+# config/litejob.yml
+production:
+  database: primary   # path = Rails primary SQLite file
+  outbox: true        # default when database: primary
+  # table_prefix: litestack_   # default on primary → table litestack_queue
+  # table_prefix: ""           # bare "queue" (only if you accept name clash risk)
+```
+
+```ruby
+Order.transaction do
+  order = Order.create!(...)
+  ReportJob.perform_later(order.id)  # same COMMIT as order
+end
+```
 | **LiteJob leadership** | `leadership: true` (default when path ok) | Every process may run GC | Named lock: one GC leader |
 | **LiteJob results** | `job_results: true` | Table still works without Honker | Same; stream optional |
 | **LiteJob lifecycle** | `lifecycle_stream: true` | No stream | Honker stream → LiteBoard feed |

@@ -56,35 +56,38 @@ describe "LiteJob transactional outbox (database: primary)" do
     assert_equal false, q.options[:enqueue_after_transaction_commit]
   end
 
-  it "creates the queue table on the primary database file" do
+  it "creates the prefixed queue table on the primary database file" do
     q = build_queue
     tables = ActiveRecord::Base.connection.tables
-    assert_includes tables, "queue"
-    # co-located: LiteJob count uses same file
+    assert_equal "litestack_queue", q.queue_table
+    assert_includes tables, "litestack_queue"
+    refute_includes tables, "queue" # avoid bare name collision with apps
     assert_equal 0, q.count
   end
 
   it "rolls back the job when the AR transaction rolls back" do
     q = build_queue
     assert_equal 0, q.count
+    t = q.queue_table
 
     ActiveRecord::Base.transaction do
       ActiveRecord::Base.connection.execute("INSERT INTO orders(name) VALUES ('a')")
       q.push("NoOpJob", [], 0, "default")
       # Outbox wrote on the AR raw connection — visible here, not necessarily
       # on LiteJob's separate pool connection until commit.
-      ar_count = ActiveRecord::Base.connection.select_value("SELECT COUNT(*) FROM queue")
+      ar_count = ActiveRecord::Base.connection.select_value("SELECT COUNT(*) FROM #{t}")
       assert_equal 1, ar_count.to_i
       raise ActiveRecord::Rollback
     end
 
     assert_equal 0, ActiveRecord::Base.connection.select_value("SELECT COUNT(*) FROM orders").to_i
-    assert_equal 0, ActiveRecord::Base.connection.select_value("SELECT COUNT(*) FROM queue").to_i
+    assert_equal 0, ActiveRecord::Base.connection.select_value("SELECT COUNT(*) FROM #{t}").to_i
     assert_equal 0, q.count
   end
 
   it "commits the job with the business row in one transaction" do
     q = build_queue
+    t = q.queue_table
 
     ActiveRecord::Base.transaction do
       ActiveRecord::Base.connection.execute("INSERT INTO orders(name) VALUES ('b')")
@@ -92,8 +95,26 @@ describe "LiteJob transactional outbox (database: primary)" do
     end
 
     assert_equal 1, ActiveRecord::Base.connection.select_value("SELECT COUNT(*) FROM orders").to_i
-    assert_equal 1, ActiveRecord::Base.connection.select_value("SELECT COUNT(*) FROM queue").to_i
+    assert_equal 1, ActiveRecord::Base.connection.select_value("SELECT COUNT(*) FROM #{t}").to_i
     assert_equal 1, q.count
+  end
+
+  it "allows an app table named queue alongside litestack_queue" do
+    ActiveRecord::Base.connection.create_table(:queue, force: true) do |t|
+      t.string :label
+    end
+    ActiveRecord::Base.connection.execute("INSERT INTO queue(label) VALUES ('app')")
+    q = build_queue
+    q.push("NoOpJob", [], 0, "default")
+    assert_equal 1, q.count
+    assert_equal 1, ActiveRecord::Base.connection.select_value("SELECT COUNT(*) FROM queue").to_i
+    assert_equal "app", ActiveRecord::Base.connection.select_value("SELECT label FROM queue LIMIT 1")
+  end
+
+  it "honors explicit empty table_prefix on primary" do
+    q = build_queue(table_prefix: "")
+    assert_equal "queue", q.queue_table
+    assert_includes ActiveRecord::Base.connection.tables, "queue"
   end
 
   it "falls back to the LiteJob pool outside a transaction" do

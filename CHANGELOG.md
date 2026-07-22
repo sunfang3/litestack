@@ -43,6 +43,10 @@ LiteJob and LiteCable can use the optional [`honker`](https://github.com/russell
 - **Honker docs + generator templates**: `docs/HONKER.md` (install from GitHub
   Packages `sunfang3`, capability matrix); generator adds `config/litejob.yml`
   and comments on cable/cache; README / `RAILS_FULL_STACK.md` app Gemfile recipe.
+- **Outbox `table_prefix`**: co-located primary DB uses `litestack_queue` by
+  default (`table_prefix: "litestack_"`) so an app table named `queue` is safe;
+  schema on primary avoids `PRAGMA user_version`. Standalone queues stay
+  unprefixed (`queue`).
 
 ## [1.0.0] - 2026-07-17
 

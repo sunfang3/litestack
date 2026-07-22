@@ -49,3 +49,5 @@ production:
   # Same DB as Rails primary (transactional outbox):
   # database: primary
   # outbox: true
+  # table_prefix: litestack_   # default when database: primary → litestack_queue
+  # # table_prefix: ""         # force bare "queue" table (not recommended)

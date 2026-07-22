@@ -66,9 +66,11 @@ class Litejobqueue < Litequeue
     # Shared-database / transactional outbox (PR5)
     #   database: :primary  → use Rails primary SQLite file as queue store
     #   outbox: true        → push on the open AR connection when in a transaction
+    #   table_prefix: "litestack_" → physical table litestack_queue (auto when primary)
     #   enqueue_after_transaction_commit: false required for true outbox (auto-set)
     database: nil,
     outbox: nil,
+    table_prefix: nil,
     enqueue_after_transaction_commit: true,
     # Maintenance leadership (Honker named lock when available)
     leadership: true,
@@ -288,6 +290,13 @@ class Litejobqueue < Litequeue
     # Co-located primary implies outbox semantics unless explicitly disabled.
     @options[:outbox] = true if @options[:outbox].nil?
 
+    # Avoid clashing with an app table named "queue" on the primary file.
+    if @options[:table_prefix].nil?
+      @options[:table_prefix] = "litestack_"
+    end
+    # Invalidate memoized table name if configure re-ran
+    remove_instance_variable(:@queue_table) if instance_variable_defined?(:@queue_table)
+
     # True outbox writes the job row inside the AR transaction. Rails' default
     # "enqueue after commit" would reintroduce dual-write; force it off unless
     # the operator opts back in with force_enqueue_after_commit: true.
@@ -334,7 +343,8 @@ class Litejobqueue < Litequeue
         delay: delay,
         queue: queue || "default",
         notify: !!@options[:queue_notify],
-        extension_path: @options[:honker_extension_path]
+        extension_path: @options[:honker_extension_path],
+        table_name: queue_table
       )
     end
   end
