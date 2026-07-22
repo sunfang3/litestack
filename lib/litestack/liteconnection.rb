@@ -147,6 +147,7 @@ module Litesupport
       @options.merge!(Litesupport.resolve_options(options))
       # Final pass: path may still be a proc if nested
       @options[:path] = @options[:path].call if @options[:path].respond_to?(:call)
+      resolve_shared_database! if respond_to?(:resolve_shared_database!, true)
     end
 
     def setup

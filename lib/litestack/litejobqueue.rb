@@ -4,6 +4,8 @@ require_relative "litequeue"
 require_relative "litemetric"
 require_relative "wakeup"
 require_relative "job_backend"
+require_relative "database_resolver"
+require_relative "outbox"
 
 ##
 # Litejobqueue is a job queueing and processing system designed for Ruby applications. It is built on top of SQLite, which is an embedded relational database management system that is #lightweight and fast.
@@ -56,7 +58,14 @@ class Litejobqueue < Litequeue
     # Job storage: :litequeue (destructive pop) or :honker (claim/ack)
     backend: :litequeue,
     visibility_timeout: 300,
-    heartbeat_interval: 60
+    heartbeat_interval: 60,
+    # Shared-database / transactional outbox (PR5)
+    #   database: :primary  → use Rails primary SQLite file as queue store
+    #   outbox: true        → push on the open AR connection when in a transaction
+    #   enqueue_after_transaction_commit: false required for true outbox (auto-set)
+    database: nil,
+    outbox: nil,
+    enqueue_after_transaction_commit: true
   }
 
   @@queue = nil
@@ -130,10 +139,11 @@ class Litejobqueue < Litequeue
   #   jobqueue.push(EasyJob, params) # the job will be performed asynchronously
   def push(jobclass, params, delay = 0, queue = nil)
     payload = Oj.dump({klass: jobclass, params: params, retries: @options[:retries], queue: queue}, mode: :strict)
-    res = @job_backend.push(payload, delay, queue)
+    res = push_payload(payload, delay, queue)
     capture(:enqueue, queue)
     @logger.info("[litejob]:[ENQ] queue:#{res[1]} class:#{jobclass} job:#{res[0]}")
-    @wakeup&.signal
+    # Local workers can wake immediately; cross-process wake follows COMMIT + watcher.
+    @wakeup&.signal unless outbox_defer_local_signal?
     res
   end
 
@@ -219,6 +229,75 @@ class Litejobqueue < Litequeue
       end
       @@queue = nil
     end
+  end
+
+  # Resolve database: primary (etc.) onto options[:path] and default outbox flags.
+  def resolve_shared_database!
+    spec = @options[:database]
+    return if spec.nil? || spec.to_s == "litejob" || spec == false
+
+    resolved = Litestack::DatabaseResolver.resolve_path(spec, @options)
+    @options[:path] = resolved if resolved
+
+    # Co-located primary implies outbox semantics unless explicitly disabled.
+    @options[:outbox] = true if @options[:outbox].nil?
+
+    # True outbox writes the job row inside the AR transaction. Rails' default
+    # "enqueue after commit" would reintroduce dual-write; force it off unless
+    # the operator opts back in with force_enqueue_after_commit: true.
+    if @options[:outbox] && !@options[:force_enqueue_after_commit]
+      @options[:enqueue_after_transaction_commit] = false
+    end
+
+    # Prefer filtered notify when sharing primary (high data_version noise).
+    wakeup = @options[:wakeup]
+    honker_wakeup = wakeup.to_s == "honker" ||
+      (wakeup.is_a?(Hash) && (wakeup[:adapter] || wakeup["adapter"]).to_s == "honker")
+    if @options[:outbox] && honker_wakeup
+      @options[:queue_notify] = true unless @options.key?(:queue_notify)
+      @options[:wakeup_filter_notifications] = true unless @options.key?(:wakeup_filter_notifications)
+    end
+  rescue ArgumentError => e
+    warn "[litejob] database resolution failed: #{e.message}; using path=#{@options[:path]}"
+  end
+
+  def push_payload(payload, delay, queue)
+    raw = Litestack::Outbox.active_raw_connection(@options)
+    if raw
+      push_via_outbox(raw, payload, delay, queue)
+    else
+      @job_backend.push(payload, delay, queue)
+    end
+  end
+
+  def push_via_outbox(raw, payload, delay, queue)
+    if @job_backend.name == :honker
+      max = (@options[:retries] || 5).to_i + 1
+      Litestack::Outbox.push_honker(
+        raw,
+        payload: payload,
+        delay: delay,
+        queue: queue || "default",
+        max_attempts: max,
+        extension_path: @options[:honker_extension_path]
+      )
+    else
+      Litestack::Outbox.push_litequeue(
+        raw,
+        value: payload,
+        delay: delay,
+        queue: queue || "default",
+        notify: !!@options[:queue_notify],
+        extension_path: @options[:honker_extension_path]
+      )
+    end
+  end
+
+  # When enqueue is still inside an open AR transaction, the row is not visible
+  # to other connections yet. Still signal local waiters — workers may spin once
+  # and miss; they will see the row after commit via wakeup/fallback.
+  def outbox_defer_local_signal?
+    false
   end
 
   # --- Backend hooks used by JobBackend::Destructive ---

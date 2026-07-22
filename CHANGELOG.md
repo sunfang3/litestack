@@ -10,6 +10,10 @@ LiteJob and LiteCable can use the optional [`honker`](https://github.com/russell
 - **LiteCable transport** (`transport: :polling | :honker`): cross-process broadcast via Honker notifications instead of 50ms message-table polling.
 - Sample configs: `samples/litejob.honker.yml`, `samples/litecable.honker.yml`.
 - Design notes: `docs/Integration_with_Honker.md`.
+- **Transactional outbox** (`database: primary`, `outbox: true`): co-locate the
+  LiteJob queue on the Rails primary SQLite file and enqueue on the open
+  ActiveRecord connection so business rows and jobs share one COMMIT.
+  Automatically sets `enqueue_after_transaction_commit: false`.
 
 ## [1.0.0] - 2026-07-17
 

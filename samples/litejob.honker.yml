@@ -34,3 +34,10 @@ production:
   # backend: honker
   # visibility_timeout: 300
   # heartbeat_interval: 60
+
+  # PR5: co-locate queue tables on the Rails primary SQLite file so
+  #   Order.transaction { order.save!; ReportJob.perform_later(order.id) }
+  # is one atomic COMMIT (set enqueue_after_transaction_commit false automatically).
+  # database: primary
+  # outbox: true
+

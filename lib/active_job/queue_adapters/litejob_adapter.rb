@@ -22,7 +22,16 @@ module ActiveJob
       end
 
       def enqueue_after_transaction_commit?
-        Job.options[:enqueue_after_transaction_commit]
+        # Prefer the live jobqueue options (reflects database: primary / outbox).
+        queue = begin
+          Job.jobqueue
+        rescue
+          nil
+        end
+        if queue && queue.respond_to?(:options) && queue.options.key?(:enqueue_after_transaction_commit)
+          return !!queue.options[:enqueue_after_transaction_commit]
+        end
+        !!Job.options[:enqueue_after_transaction_commit]
       end
 
       def stopping?
@@ -72,6 +81,7 @@ module ActiveJob
         DEFAULT_OPTIONS = {
           config_path: "./config/litejob.yml",
           logger: nil, # Rails performs its logging already
+          # Overridden to false automatically when database: primary / outbox: true
           enqueue_after_transaction_commit: true
         }
 
