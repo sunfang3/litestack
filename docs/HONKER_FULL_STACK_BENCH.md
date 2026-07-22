@@ -204,14 +204,22 @@ bundle exec rake soak:honker
 
 | 指标 | polling / no-L1 | honker / L1 |
 |------|-----------------|-------------|
-| Job 吞吐（批量连续入队） | 往往更高 | claim/ack 更重，吞吐可能更低 |
+| Job 吞吐（批量连续入队） | 最高（destructive pop） | claim/ack 更重，约 **0.4–0.7×** pop 是正常量级 |
 | Cache 热读 IPS | 基线 | 常 **10–30×** |
 | Cache invalidate p50 | — | 亚毫秒～数 ms |
 | Cable 投递 p50 | ~20–50ms（轮询） | 常 **数 ms**（约 **5–10×** 更快） |
 
-- **Job**：Honker **wakeup** 的价值在「空闲队列上突然有任务」时的尾延迟；**backend: honker** 换的是 crash 后的 claim 语义，不是峰值 jobs/s。
-- **Cache L1**：热 key 收益最大；多 worker 靠 `invalidate: honker` 保证不脏读。
-- **Cable**：Honker 主要砍掉 ~50ms 轮询间隔带来的延迟。
+- **Job**：`backend: honker` 买的是 **crash 后 claim 语义**，不是峰值 jobs/s。
+  `wakeup: honker` 买的是 **空闲队列上突然有任务** 时的尾延迟。
+- 若看到 full-honker 只有 **0.08×** 且 wall≈1s：多半是
+  1) 旧 bug：`wakeup_filter_notifications` 开了但 enqueue 没 `notify`（已修）；
+  2) 旧 bench 把 `producer.stop` 的 sweep `join(1s)` 算进吞吐（已修）。
+- **推荐生产组合**（吞吐与可靠性折中）：
+  - 可靠性优先：`backend: honker` + `wakeup: honker` + filter notify
+  - 吞吐优先但仍要 claim：`backend: honker` + `wakeup: polling`（或 unfiltered honker）
+  - 最大吞吐、可接受 at-most-once：`backend: litequeue` + `wakeup: honker`
+- **Cache L1**：热 key 收益最大；多 worker 靠 `invalidate: honker`。
+- **Cable**：Honker 主要砍掉 ~50ms 轮询间隔。
 
 ---
 

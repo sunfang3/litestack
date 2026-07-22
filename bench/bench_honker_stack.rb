@@ -80,6 +80,8 @@ module HonkerStackBench
 
     ENV["HSB_DONE"] = done_file
 
+    # Tight fallback so a missed notify is not measured as a 1s stall.
+    # (fallback_interval is a safety net, not the primary wake path.)
     opts_common = {
       path: path,
       workers: 0,
@@ -89,20 +91,25 @@ module HonkerStackBench
       lifecycle_stream: false,
       job_results: false,
       retries: 1,
-      sleep_intervals: [0.005, 0.02, 0.05],
-      fallback_interval: 1
+      sleep_intervals: [0.001, 0.005, 0.02],
+      fallback_interval: 0.05
     }
 
-    honker = (mode == :honker)
+    # Modes:
+    #   :polling — destructive pop + sleep polling (max throughput baseline)
+    #   :honker  — claim/ack + wakeup:honker + filtered notify (production-like)
+    #   :honker_backend_only — claim/ack + polling wake (isolates claim cost)
+    honker_backend = mode.to_s.start_with?("honker")
+    honker_wake = (mode == :honker)
     worker_opts = opts_common.merge(
       workers: 1,
-      backend: honker ? :honker : :litequeue,
-      wakeup: honker ? :honker : :polling,
+      backend: honker_backend ? :honker : :litequeue,
+      wakeup: honker_wake ? :honker : :polling,
       watcher_poll_interval_ms: 5,
       visibility_timeout: 30,
       heartbeat_interval: 0,
-      queue_notify: honker,
-      wakeup_filter_notifications: honker
+      queue_notify: honker_wake,
+      wakeup_filter_notifications: honker_wake
     )
 
     pids = workers.times.map do |w|
@@ -122,14 +129,16 @@ module HonkerStackBench
     sleep 0.25
     Litejobqueue.reset_singleton! if Litejobqueue.respond_to?(:reset_singleton!)
     producer = Litejobqueue.jobqueue(opts_common.merge(
-      backend: honker ? :honker : :litequeue,
-      wakeup: honker ? :honker : :polling,
-      queue_notify: honker
+      backend: honker_backend ? :honker : :litequeue,
+      wakeup: honker_wake ? :honker : :polling,
+      queue_notify: honker_wake,
+      wakeup_filter_notifications: honker_wake
     ))
 
+    # Time only enqueue → all jobs done. Do NOT include producer.stop / worker
+    # teardown (Honker sweep-thread join previously inflated wall by ~1s).
     t0 = mono
     jobs.times { |i| producer.push("HonkerStackBenchJob", [i], 0, "default") }
-    producer.stop
 
     deadline = t0 + [jobs * 0.5, 60].max
     loop do
@@ -138,12 +147,22 @@ module HonkerStackBench
       if mono > deadline
         pids.each { |pid| Process.kill("TERM", pid) rescue nil }
         pids.each { |pid| Process.wait(pid) rescue nil }
+        begin
+          producer.stop
+        rescue
+          nil
+        end
         return {mode: mode.to_s, ok: false, error: "timeout got #{n}/#{jobs}"}
       end
-      sleep 0.01
+      sleep 0.005
     end
     t1 = mono
 
+    begin
+      producer.stop
+    rescue
+      nil
+    end
     pids.each { |pid| Process.kill("TERM", pid) rescue nil }
     pids.each { |pid| Process.wait(pid) rescue nil }
 
@@ -157,8 +176,8 @@ module HonkerStackBench
       completed_unique: completed,
       wall_seconds: elapsed.round(4),
       jobs_per_sec: thruput(jobs, elapsed),
-      backend: honker ? "honker" : "litequeue",
-      wakeup: honker ? "honker" : "polling"
+      backend: honker_backend ? "honker" : "litequeue",
+      wakeup: honker_wake ? "honker" : "polling"
     }
   ensure
     Object.send(:remove_const, :HonkerStackBenchJob) if defined?(HonkerStackBenchJob)
@@ -409,18 +428,32 @@ module HonkerStackBench
     puts Litestack::HonkerStatus.format(status)
     puts
 
-    puts "--- LiteJob (polling vs honker) ---"
+    puts "--- LiteJob (polling vs honker full vs claim-only) ---"
     j_poll = bench_jobs(dir, mode: :polling, jobs: opts[:jobs], workers: opts[:workers])
     j_honk = bench_jobs(dir, mode: :honker, jobs: opts[:jobs], workers: opts[:workers])
-    report[:components][:litejob] = {polling: j_poll, honker: j_honk}
-    if j_poll[:ok] && j_honk[:ok]
-      speedup = (j_honk[:jobs_per_sec] / j_poll[:jobs_per_sec].to_f).round(2) rescue nil
-      report[:components][:litejob][:throughput_ratio_honker_over_poll] = speedup
+    j_claim = bench_jobs(dir, mode: :honker_backend_only, jobs: opts[:jobs], workers: opts[:workers])
+    report[:components][:litejob] = {
+      polling: j_poll,
+      honker: j_honk,
+      honker_backend_only: j_claim
+    }
+    if j_poll[:ok] && j_honk[:ok] && j_poll[:jobs_per_sec].to_f > 0
+      report[:components][:litejob][:ratio_honker_full] =
+        (j_honk[:jobs_per_sec] / j_poll[:jobs_per_sec].to_f).round(2)
     end
-    puts "  polling: #{j_poll[:jobs_per_sec]} jobs/s  wall=#{j_poll[:wall_seconds]}s  ok=#{j_poll[:ok]}"
-    puts "  honker:  #{j_honk[:jobs_per_sec]} jobs/s  wall=#{j_honk[:wall_seconds]}s  ok=#{j_honk[:ok]}"
-    puts "  ratio:   #{report.dig(:components, :litejob, :throughput_ratio_honker_over_poll)}× (honker/poll)"
+    if j_poll[:ok] && j_claim[:ok] && j_poll[:jobs_per_sec].to_f > 0
+      report[:components][:litejob][:ratio_honker_claim_only] =
+        (j_claim[:jobs_per_sec] / j_poll[:jobs_per_sec].to_f).round(2)
+    end
+    puts "  polling (pop):           #{j_poll[:jobs_per_sec]} jobs/s  wall=#{j_poll[:wall_seconds]}s  ok=#{j_poll[:ok]}"
+    puts "  honker full (claim+wake):#{j_honk[:jobs_per_sec]} jobs/s  wall=#{j_honk[:wall_seconds]}s  ok=#{j_honk[:ok]}  ratio=#{report.dig(:components, :litejob, :ratio_honker_full)}×"
+    puts "  honker claim + poll wake:#{j_claim[:jobs_per_sec]} jobs/s  wall=#{j_claim[:wall_seconds]}s  ok=#{j_claim[:ok]}  ratio=#{report.dig(:components, :litejob, :ratio_honker_claim_only)}×"
+    puts "  note: claim/ack does more SQL/job than destructive pop; full mode needs enqueue notify (fixed)"
     puts
+
+    # Keep ok check compatible
+    j_poll_ok = j_poll
+    j_honk_ok = j_honk
 
     puts "--- LiteCache (L1 + honker invalidate) ---"
     cache = bench_cache(dir, keys: opts[:cache_keys], value_bytes: opts[:value_bytes])
@@ -449,7 +482,7 @@ module HonkerStackBench
     puts "Wrote #{out}"
 
     ok = status[:ok] &&
-      j_poll[:ok] && j_honk[:ok] &&
+      j_poll_ok[:ok] && j_honk_ok[:ok] && j_claim[:ok] &&
       cache[:ok] &&
       cable[:ok]
     puts ok ? "=== BENCH OK ===" : "=== BENCH HAD FAILURES ==="

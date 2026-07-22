@@ -58,7 +58,8 @@ module Litestack
       end
 
       def push(serialized_payload, delay, queue)
-        q = honker_queue(queue || "default")
+        qname = (queue || "default").to_s
+        q = honker_queue(qname)
         delay_s = delay.to_f
         delay_s = 0 if delay_s.negative?
         # Honker's SQL binding rejects Ruby Float for delay — use whole seconds.
@@ -70,8 +71,12 @@ module Litestack
           parse_payload(serialized_payload),
           delay: delay_arg
         )
+        # Wake filtered watchers (wakeup_filter_notifications) via _honker_notifications.
+        # mark_updated alone only bumps data_version — filtered hubs ignore that and
+        # fall through to fallback_interval (often 1–5s), killing enqueue latency.
+        emit_enqueue_notify(qname, id, delay_s)
         @db.mark_updated
-        [id.to_s, queue || "default"]
+        [id.to_s, qname]
       end
 
       def repush(id, serialized_payload, delay, queue)
@@ -203,8 +208,14 @@ module Litestack
 
       def close
         @closed = true
+        # Interrupt interruptible sweep sleep without waiting a full second.
+        begin
+          @sweep_wake&.wakeup if @sweep_thread&.alive?
+        rescue ThreadError
+          nil
+        end
         if @sweep_thread&.alive?
-          @sweep_thread.join(1)
+          @sweep_thread.join(0.2)
           @sweep_thread.kill if @sweep_thread.alive?
         end
         begin
@@ -216,6 +227,25 @@ module Litestack
       end
 
       private
+
+      CHANNEL_PREFIX = "litequeue:"
+
+      def emit_enqueue_notify(queue, id, delay_s)
+        return unless @db
+
+        channel = "#{CHANNEL_PREFIX}#{queue}"
+        payload = JSON.dump({id: id.to_s, delay: delay_s.to_f, queue: queue.to_s})
+        if @db.respond_to?(:notify)
+          @db.notify(channel, payload)
+        else
+          @db.db.execute("SELECT notify(?, ?)", [channel, payload])
+        end
+      rescue => e
+        # Non-fatal: workers still wake via mark_updated (unfiltered) or fallback.
+        @jobqueue.instance_variable_get(:@logger)&.warn {
+          "[litejob] honker enqueue notify failed: #{e.class}: #{e.message}"
+        }
+      end
 
       def default_worker_id
         "litejob-#{Process.pid}-#{SecureRandom.hex(4)}"
@@ -257,6 +287,7 @@ module Litestack
       end
 
       def sweep_loop
+        @sweep_wake = Thread.current
         while !@closed && @db
           begin
             @queues.each_value do |q|
@@ -269,7 +300,18 @@ module Litestack
           rescue
             nil
           end
-          sleep 30
+          # Interruptible sleep so close does not block ~1s on join.
+          interruptible_sleep(30)
+        end
+      end
+
+      def interruptible_sleep(seconds)
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + seconds.to_f
+        while !@closed
+          remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          break if remaining <= 0
+
+          sleep([remaining, 0.05].min)
         end
       end
     end
