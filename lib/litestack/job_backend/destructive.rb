@@ -35,6 +35,11 @@ module Litestack
         true
       end
 
+      # No claim lease — yield only.
+      def with_heartbeat(_job_handle)
+        yield
+      end
+
       def retry(job_handle, serialized_payload, delay, queue)
         id = job_handle.is_a?(Array) ? job_handle[0] : job_handle
         repush(id, serialized_payload, delay, queue)

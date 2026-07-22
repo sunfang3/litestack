@@ -59,8 +59,22 @@ want the optional features add the block above.
 |------|-----------|----------------|-------------|
 | **LiteJob wake** | `wakeup: :honker` | Sleep-interval polling | `data_version` / notify wake + deadline-aware wait |
 | **LiteJob notify filter** | `queue_notify`, `wakeup_filter_notifications` | Every commit can thrash workers | Enqueue-oriented channels only |
-| **LiteJob reliability** | `backend: :honker` | Destructive `pop` (at-most-once if kill -9) | claim / ack / visibility timeout |
+| **LiteJob reliability** | `backend: :honker` | Destructive `pop` (at-most-once if kill -9) | claim / ack / visibility timeout + **heartbeat** during long `perform` |
 | **LiteJob outbox** | `database: :primary`, `outbox: true` | Separate queue file (dual-write) | Same SQLite file; auto `table_prefix: litestack_` → **`litestack_queue`**; enqueue on AR connection; no `user_version` fight with the app |
+
+### Long jobs (claim heartbeat)
+
+```yaml
+production:
+  backend: honker
+  visibility_timeout: 300   # claim lease seconds
+  heartbeat_interval: 60    # extend while perform runs; 0 = off
+  # heartbeat_extend: 300   # optional; default = visibility_timeout
+```
+
+Without heartbeat, a `perform` longer than `visibility_timeout` can be reclaimed
+by another worker (at-least-once duplicate). Heartbeat renews the lease until
+ack/retry.
 
 ### Outbox / primary co-location
 

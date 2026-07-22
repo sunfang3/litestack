@@ -47,6 +47,9 @@ LiteJob and LiteCable can use the optional [`honker`](https://github.com/russell
   default (`table_prefix: "litestack_"`) so an app table named `queue` is safe;
   schema on primary avoids `PRAGMA user_version`. Standalone queues stay
   unprefixed (`queue`).
+- **Honker long-job heartbeat**: while `perform` runs under `backend: :honker`,
+  periodically `heartbeat` the claim (`heartbeat_interval`, `heartbeat_extend`)
+  so jobs longer than `visibility_timeout` are not reclaimed mid-run.
 
 ## [1.0.0] - 2026-07-17
 

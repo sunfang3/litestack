@@ -33,7 +33,8 @@ production:
   # PR4: at-least-once claim/ack (visibility timeout reclaim after crash)
   # backend: honker
   # visibility_timeout: 300
-  # heartbeat_interval: 60
+  # heartbeat_interval: 60    # long-job claim renewal during perform
+  # heartbeat_extend: 300
 
   # PR5: co-locate queue tables on the Rails primary SQLite file so
   #   Order.transaction { order.save!; ReportJob.perform_later(order.id) }

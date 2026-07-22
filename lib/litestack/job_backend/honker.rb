@@ -24,8 +24,13 @@ module Litestack
         @options = options
         @path = options[:path].to_s
         @visibility_timeout = (options[:visibility_timeout] || options[:visibility_timeout_s] || 300).to_i
+        @visibility_timeout = 300 if @visibility_timeout <= 0
         @max_attempts = (options[:retries] || 5).to_i + 1 # Honker counts attempts including first
-        @heartbeat_interval = (options[:heartbeat_interval] || 60).to_i
+        # How often to extend a claim while perform runs. 0 disables heartbeat.
+        @heartbeat_interval = (options[:heartbeat_interval] || options[:heartbeat_interval_s] || 60).to_f
+        # Seconds to extend visibility on each beat (default = full visibility timeout).
+        @heartbeat_extend = (options[:heartbeat_extend] || options[:heartbeat_extend_s] || @visibility_timeout).to_i
+        @heartbeat_extend = @visibility_timeout if @heartbeat_extend <= 0
         @extension_path = options[:honker_extension_path]
         @watcher_backend = options[:watcher_backend]
         @worker_id = options[:worker_id] || default_worker_id
@@ -109,6 +114,49 @@ module Litestack
         return true unless job
 
         job.ack
+      end
+
+      # Run +block+ while periodically heartbeating the claim so long jobs are
+      # not reclaimed when visibility_timeout elapses mid-perform.
+      def with_heartbeat(job_handle)
+        job = extract_honker_job(job_handle)
+        return yield if job.nil? || !heartbeat_enabled?
+
+        stop = false
+        mutex = Mutex.new
+        cv = ConditionVariable.new
+        thr = Thread.new do
+          Thread.current.report_on_exception = false
+          mutex.synchronize do
+            until stop
+              cv.wait(mutex, @heartbeat_interval)
+              break if stop
+
+              begin
+                ok = job.heartbeat(extend_s: @heartbeat_extend)
+                break unless ok
+              rescue
+                break
+              end
+            end
+          end
+        end
+        thr.name = "litejob-hb-#{job.id}" if thr.respond_to?(:name=)
+
+        begin
+          yield
+        ensure
+          mutex.synchronize do
+            stop = true
+            cv.signal
+          end
+          thr.join(2)
+          thr.kill if thr.alive?
+        end
+      end
+
+      def heartbeat_enabled?
+        @heartbeat_interval.positive?
       end
 
       def retry(job_handle, serialized_payload, delay, queue)

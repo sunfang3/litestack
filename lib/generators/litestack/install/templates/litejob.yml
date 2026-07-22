@@ -45,6 +45,8 @@ production:
   # At-least-once (claim/ack):
   # backend: honker
   # visibility_timeout: 300
+  # heartbeat_interval: 60    # renew claim during long perform; 0 disables
+  # heartbeat_extend: 300
   #
   # Same DB as Rails primary (transactional outbox):
   # database: primary

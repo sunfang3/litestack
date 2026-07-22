@@ -103,4 +103,53 @@ describe "Litejobqueue honker backend" do
       Litejobqueue.reset_singleton!
     end
   end
+
+  it "heartbeats so a long job is not reclaimed mid-perform" do
+    skip "honker gem not available" unless Litestack::JobBackend::Honker.available?
+
+    with_tmp_db("honker-hb") do |path|
+      Performance.reset!
+      q = Litejobqueue.jobqueue(
+        path: path,
+        backend: :honker,
+        logger: nil,
+        workers: 1,
+        queues: [["default", 1]],
+        retries: 0,
+        visibility_timeout: 2,
+        heartbeat_interval: 0.5,
+        heartbeat_extend: 3,
+        wakeup: :honker,
+        watcher_poll_interval_ms: 5,
+        fallback_interval: 1,
+        sleep_intervals: [0.05],
+        leadership: false,
+        lifecycle_stream: false
+      )
+
+      job_klass = Class.new do
+        def perform
+          Performance.performed!
+          # Longer than visibility_timeout without heartbeat would lose the claim
+          # and allow a second worker to re-run (or duplicate after sweep).
+          sleep 3.2
+          Performance.processed!(:done)
+        end
+      end
+      Object.const_set(:HonkerHeartbeatJob, job_klass)
+
+      q.push("HonkerHeartbeatJob", [], 0, "default")
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 12
+      while Performance.processed_items.nil? || Performance.processed_items.empty?
+        break if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+        sleep 0.1
+      end
+      assert_equal 1, Performance.performances, "job should run once (not reclaimed)"
+      assert_equal [:done], Performance.processed_items
+    ensure
+      Object.send(:remove_const, :HonkerHeartbeatJob) if defined?(HonkerHeartbeatJob)
+      q&.stop rescue nil
+      Litejobqueue.reset_singleton!
+    end
+  end
 end

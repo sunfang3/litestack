@@ -61,8 +61,10 @@ class Litejobqueue < Litequeue
     queue_notify: false,
     # Job storage: :litequeue (destructive pop) or :honker (claim/ack)
     backend: :litequeue,
+    # Honker claim lease (seconds); heartbeat extends it during perform
     visibility_timeout: 300,
-    heartbeat_interval: 60,
+    heartbeat_interval: 60, # 0 disables; should be < visibility_timeout
+    heartbeat_extend: nil,  # default = visibility_timeout
     # Shared-database / transactional outbox (PR5)
     #   database: :primary  → use Rails primary SQLite file as queue store
     #   outbox: true        → push on the open AR connection when in a transaction
@@ -635,7 +637,9 @@ class Litejobqueue < Litequeue
       job_started # (Litesupport.current_context)
       begin
         value = nil
-        measure(:perform, queue) { value = klass.new.perform(*job["params"]) }
+        with_job_heartbeat(handle) do
+          measure(:perform, queue) { value = klass.new.perform(*job["params"]) }
+        end
         @logger.info "[litejob]:[END] queue:#{queue} class:#{job["klass"]} job:#{id}"
         @job_backend.ack(handle || [id, serialized_job])
         store_job_result(id, status: "ok", value: value)
@@ -676,6 +680,15 @@ class Litejobqueue < Litequeue
     end
   rescue Exception => e # standard:disable Lint/RescueException
     @logger.error "[litejob]:[ERR] queue:#{queue} job:#{id} failure handling raised #{e.class}: #{e.message}"
+  end
+
+  # Extend Honker claim lease while perform runs (no-op for destructive backend).
+  def with_job_heartbeat(handle, &block)
+    if @job_backend.respond_to?(:with_heartbeat)
+      @job_backend.with_heartbeat(handle, &block)
+    else
+      yield
+    end
   end
 
   def store_job_result(job_id, status:, value: nil, error: nil)
