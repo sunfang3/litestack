@@ -14,6 +14,13 @@ LiteJob and LiteCable can use the optional [`honker`](https://github.com/russell
   LiteJob queue on the Rails primary SQLite file and enqueue on the open
   ActiveRecord connection so business rows and jobs share one COMMIT.
   Automatically sets `enqueue_after_transaction_commit: false`.
+- **Leadership locks** (`leadership: true`): Honker named locks so only one
+  process runs LiteJob GC / LiteCable pruner under multi-worker deploy.
+- **JobHandle + results** (`job_results: true`): `perform_async` returns a
+  `JobHandle` (`id, queue = handle` still works); `handle.wait(timeout:)` blocks
+  until the worker stores the perform return value or a terminal failure.
+- **Lifecycle stream** (`lifecycle_stream: true`): optional Honker stream of
+  `job.enqueued` / `started` / `succeeded` / `retried` / `dead` events.
 
 ## [1.0.0] - 2026-07-17
 

@@ -4,6 +4,7 @@
 require_relative "litesupport"
 require_relative "litemetric"
 require_relative "wakeup"
+require_relative "leadership"
 
 require "base64"
 require "oj"
@@ -25,7 +26,10 @@ class Litecable
     # :honker — notify/listen via honker (optional gem, file-backed path)
     transport: :polling,
     watcher_poll_interval_ms: 5,
-    honker_channel_prefix: "litecable:"
+    honker_channel_prefix: "litecable:",
+    # Single-leader pruner when Honker named locks are available
+    leadership: true,
+    leadership_ttl: 30
   }
 
   def initialize(options = {})
@@ -118,6 +122,8 @@ class Litecable
     @running = true
     @last_fetched_id = nil
 
+    setup_pruner_leadership!
+
     if honker_transport? && can_use_honker?
       setup_honker_transport!
     else
@@ -129,6 +135,25 @@ class Litecable
       @pruner = track_worker(create_pruner)
       @broadcaster = track_worker(create_broadcaster)
     end
+  end
+
+  def setup_pruner_leadership!
+    begin
+      @pruner_leadership&.close
+    rescue
+      nil
+    end
+    @pruner_leadership = nil
+    return if @options[:leadership] == false
+    return unless Litestack::Wakeup::Honker.watchable_path?(@options[:path])
+
+    @pruner_leadership = Litestack::Leadership.new(
+      path: @options[:path],
+      name: "litestack:litecable:pruner",
+      ttl_s: @options[:leadership_ttl] || 30,
+      extension_path: @options[:honker_extension_path],
+      watcher_poll_interval_ms: @options[:watcher_poll_interval_ms]
+    )
   end
 
   def can_use_honker?
@@ -193,7 +218,11 @@ class Litecable
     Litescheduler.spawn do
       while @running
         begin
-          run_stmt(:prune, @options[:expire_after])
+          if @pruner_leadership
+            @pruner_leadership.with_lock { run_stmt(:prune, @options[:expire_after]) }
+          else
+            run_stmt(:prune, @options[:expire_after])
+          end
         rescue Litestack::ClosedError
           break
         end
@@ -285,7 +314,13 @@ class Litecable
     Litescheduler.spawn do
       while @running
         begin
-          @honker_db&.prune_notifications(older_than_s: @options[:expire_after].to_i)
+          if @pruner_leadership
+            @pruner_leadership.with_lock do
+              @honker_db&.prune_notifications(older_than_s: @options[:expire_after].to_i)
+            end
+          else
+            @honker_db&.prune_notifications(older_than_s: @options[:expire_after].to_i)
+          end
         rescue
           nil
         end
@@ -318,6 +353,12 @@ class Litecable
       nil
     end
     @honker_db = nil
+    begin
+      @pruner_leadership&.close
+    rescue
+      nil
+    end
+    @pruner_leadership = nil
     super
   end
 end

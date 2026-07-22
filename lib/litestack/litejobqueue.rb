@@ -6,6 +6,10 @@ require_relative "wakeup"
 require_relative "job_backend"
 require_relative "database_resolver"
 require_relative "outbox"
+require_relative "leadership"
+require_relative "job_result_store"
+require_relative "job_handle"
+require_relative "lifecycle"
 
 ##
 # Litejobqueue is a job queueing and processing system designed for Ruby applications. It is built on top of SQLite, which is an embedded relational database management system that is #lightweight and fast.
@@ -65,7 +69,16 @@ class Litejobqueue < Litequeue
     #   enqueue_after_transaction_commit: false required for true outbox (auto-set)
     database: nil,
     outbox: nil,
-    enqueue_after_transaction_commit: true
+    enqueue_after_transaction_commit: true,
+    # Maintenance leadership (Honker named lock when available)
+    leadership: true,
+    leadership_ttl: 30,
+    # Job result wait API (JobHandle#wait)
+    job_results: true,
+    result_ttl: 3600,
+    # Durable lifecycle stream (Honker stream; optional)
+    lifecycle_stream: false,
+    lifecycle_stream_topic: "litestack:litejob:events"
   }
 
   @@queue = nil
@@ -111,7 +124,10 @@ class Litejobqueue < Litequeue
     options = options.dup
     if honker_notify_implied?(options)
       options[:queue_notify] = true unless options.key?(:queue_notify)
-      options[:wakeup_filter_notifications] = true if options[:wakeup].to_s == "honker" || options.dig(:wakeup, :adapter).to_s == "honker"
+      wu = options[:wakeup]
+      if wu.to_s == "honker" || (wu.is_a?(Hash) && (wu[:adapter] || wu["adapter"]).to_s == "honker")
+        options[:wakeup_filter_notifications] = true
+      end
     end
     super(options)
 
@@ -144,7 +160,8 @@ class Litejobqueue < Litequeue
     @logger.info("[litejob]:[ENQ] queue:#{res[1]} class:#{jobclass} job:#{res[0]}")
     # Local workers can wake immediately; cross-process wake follows COMMIT + watcher.
     @wakeup&.signal unless outbox_defer_local_signal?
-    res
+    emit_lifecycle("job.enqueued", job_id: res[0], queue: res[1], klass: jobclass, delay: delay)
+    wrap_handle(res)
   end
 
   def repush(id, job, delay = 0, queue = nil)
@@ -152,7 +169,36 @@ class Litejobqueue < Litequeue
     capture(:enqueue, queue)
     @logger.info("[litejob]:[ENQ] queue:#{res[0]} class:#{job[:klass] || job["klass"]} job:#{id}")
     @wakeup&.signal
+    emit_lifecycle("job.enqueued", job_id: id, queue: queue || res[0], klass: job[:klass] || job["klass"], delay: delay, requeue: true)
     res
+  end
+
+  def job_result(job_id)
+    @result_store&.get(job_id)
+  end
+
+  # Block until a result is saved for +job_id+, or +timeout+ elapses.
+  def wait_for_result(job_id, timeout: nil)
+    return nil unless @result_store&.enabled?
+
+    deadline = timeout ? Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout.to_f : nil
+    loop do
+      got = @result_store.get(job_id)
+      return got if got
+
+      remaining = if deadline
+        left = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        return nil if left <= 0
+        [left, 0.5].min
+      else
+        0.5
+      end
+      if @wakeup
+        @wakeup.wait(timeout: remaining)
+      else
+        sleep remaining
+      end
+    end
   end
 
   # delete a job from the job queue
@@ -363,6 +409,21 @@ class Litejobqueue < Litequeue
     rescue
       nil
     end
+    begin
+      @gc_leadership&.close
+    rescue
+      nil
+    end
+    begin
+      @result_store&.close
+    rescue
+      nil
+    end
+    begin
+      @lifecycle&.close
+    rescue
+      nil
+    end
 
     super
     @jobs_in_flight = 0
@@ -379,6 +440,21 @@ class Litejobqueue < Litequeue
 
     @wakeup = Litestack::Wakeup.build(@options)
     track_waiter(@wakeup) if @wakeup.respond_to?(:wake!) || @wakeup.respond_to?(:signal)
+
+    @result_store = Litestack::JobResultStore.new(self, @options)
+    @lifecycle = Litestack::Lifecycle.new(@options)
+
+    if @options[:leadership] != false && Litestack::Wakeup::Honker.watchable_path?(@options[:path])
+      @gc_leadership = Litestack::Leadership.new(
+        path: @options[:path],
+        name: "litestack:litejob:gc",
+        ttl_s: @options[:leadership_ttl] || 30,
+        extension_path: @options[:honker_extension_path],
+        watcher_poll_interval_ms: @options[:watcher_poll_interval_ms]
+      )
+    else
+      @gc_leadership = nil
+    end
 
     count = @options[:workers].to_i
     @workers = count.times.collect { track_worker(create_worker) }
@@ -514,14 +590,13 @@ class Litejobqueue < Litequeue
     waiter = track_waiter
     Litescheduler.spawn do
       while @running
-        while (jobs = claim_job("_dead", 100))
-          # ack/destructive pop already removed rows
-          if jobs[0].is_a? Array
-            @logger.info "[litejob]:[DEL] garbage collector deleted #{jobs.length} dead jobs"
-          else
-            @logger.info "[litejob]:[DEL] garbage collector deleted 1 dead job"
-          end
+        ran = if @gc_leadership
+          @gc_leadership.with_lock { run_dead_job_gc }
+        else
+          run_dead_job_gc
+          true
         end
+        @result_store&.sweep! if ran
         if @wakeup
           @wakeup.wait(timeout: @options[:gc_sleep_interval])
         else
@@ -531,16 +606,31 @@ class Litejobqueue < Litequeue
     end
   end
 
+  def run_dead_job_gc
+    while (jobs = claim_job("_dead", 100))
+      if jobs[0].is_a? Array
+        @logger.info "[litejob]:[DEL] garbage collector deleted #{jobs.length} dead jobs"
+      else
+        @logger.info "[litejob]:[DEL] garbage collector deleted 1 dead job"
+      end
+    end
+  end
+
   def process_job(queue, id, serialized_job, spawns, handle = nil)
     job = Oj.load(serialized_job)
     @logger.info "[litejob]:[DEQ] queue:#{queue} class:#{job["klass"]} job:#{id}"
     klass = Object.const_get(job["klass"])
+    emit_lifecycle("job.started", job_id: id, queue: queue, klass: job["klass"])
     schedule(spawns) do # run the job in a new context
       job_started # (Litesupport.current_context)
       begin
-        measure(:perform, queue) { klass.new.perform(*job["params"]) }
+        value = nil
+        measure(:perform, queue) { value = klass.new.perform(*job["params"]) }
         @logger.info "[litejob]:[END] queue:#{queue} class:#{job["klass"]} job:#{id}"
         @job_backend.ack(handle || [id, serialized_job])
+        store_job_result(id, status: "ok", value: value)
+        emit_lifecycle("job.succeeded", job_id: id, queue: queue, klass: job["klass"])
+        @wakeup&.signal
       rescue Exception => e # standard:disable Lint/RescueException
         handle_job_failure(queue, id, job, e, handle, serialized_job)
       ensure
@@ -563,15 +653,33 @@ class Litejobqueue < Litequeue
       @logger.error "[litejob]:[ERR] queue:#{queue} class:#{job["klass"]} job:#{id} failed with #{error}:#{error.message}, retries exhausted, moved to _dead queue"
       @job_backend.ack(handle || [id, serialized_job]) if @job_backend.name == :honker
       repush(id, job, @options[:dead_job_retention], "_dead")
+      store_job_result(id, status: "dead", error: "#{error.class}: #{error.message}")
+      emit_lifecycle("job.dead", job_id: id, queue: queue, klass: job["klass"], error: error.message)
+      @wakeup&.signal
     else
       capture(:retry, queue)
       retry_delay = @options[:retry_delay_multiplier].pow(@options[:retries] - job["retries"]) * @options[:retry_delay]
       job["retries"] -= 1
       @logger.error "[litejob]:[ERR] queue:#{queue} class:#{job["klass"]} job:#{id} failed with #{error}:#{error.message}, retrying in #{retry_delay} seconds"
       @job_backend.retry(handle || [id, serialized_job], Oj.dump(job, mode: :strict), retry_delay, queue)
+      emit_lifecycle("job.retried", job_id: id, queue: queue, klass: job["klass"], error: error.message, delay: retry_delay)
     end
   rescue Exception => e # standard:disable Lint/RescueException
     @logger.error "[litejob]:[ERR] queue:#{queue} job:#{id} failure handling raised #{e.class}: #{e.message}"
+  end
+
+  def store_job_result(job_id, status:, value: nil, error: nil)
+    @result_store&.save(job_id, status: status, value: value, error: error)
+  end
+
+  def emit_lifecycle(event, **fields)
+    @lifecycle&.emit(event, **fields)
+  end
+
+  def wrap_handle(res)
+    id = res.is_a?(Array) ? res[0] : res
+    qn = res.is_a?(Array) ? res[1] : "default"
+    Litestack::JobHandle.new(self, id, qn)
   end
 
   def close_connection_pool
@@ -587,6 +695,24 @@ class Litejobqueue < Litequeue
       nil
     end
     @job_backend = nil
+    begin
+      @gc_leadership&.close
+    rescue
+      nil
+    end
+    @gc_leadership = nil
+    begin
+      @result_store&.close
+    rescue
+      nil
+    end
+    @result_store = nil
+    begin
+      @lifecycle&.close
+    rescue
+      nil
+    end
+    @lifecycle = nil
     super
   end
 end

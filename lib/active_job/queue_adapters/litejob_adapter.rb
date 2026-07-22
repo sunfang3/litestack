@@ -45,7 +45,8 @@ module ActiveJob
           # Persist for later process; do not start locally
           instrument_deferred(job)
         end
-        provider_job_id = Job.perform_async_on_queue(queue_name, job.serialize)
+        handle = Job.perform_async_on_queue(queue_name, job.serialize)
+        provider_job_id = extract_provider_job_id(handle)
         job.provider_job_id = provider_job_id if job.respond_to?(:provider_job_id=)
         provider_job_id
       end
@@ -56,7 +57,8 @@ module ActiveJob
         if stopping?
           instrument_deferred(job)
         end
-        provider_job_id = Job.perform_at_on_queue(queue_name, time, job.serialize)
+        handle = Job.perform_at_on_queue(queue_name, time, job.serialize)
+        provider_job_id = extract_provider_job_id(handle)
         job.provider_job_id = provider_job_id if job.respond_to?(:provider_job_id=)
         provider_job_id
       end
@@ -74,6 +76,17 @@ module ActiveJob
             job_class: job.class.name,
             queue: job.queue_name
           )
+        end
+      end
+
+      def extract_provider_job_id(handle)
+        case handle
+        when Litestack::JobHandle
+          handle.id
+        when Array
+          handle[0]
+        else
+          handle
         end
       end
 

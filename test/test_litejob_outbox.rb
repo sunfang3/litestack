@@ -18,6 +18,12 @@ describe "LiteJob transactional outbox (database: primary)" do
   end
 
   after do
+    begin
+      q = Litejobqueue.class_variable_get(:@@queue) rescue nil
+      q&.stop rescue nil
+    rescue
+      nil
+    end
     Litejobqueue.reset_singleton! if Litejobqueue.respond_to?(:reset_singleton!)
     begin
       ActiveRecord::Base.remove_connection
@@ -37,7 +43,9 @@ describe "LiteJob transactional outbox (database: primary)" do
       workers: 0,
       queues: [["default", 1]],
       retries: 1,
-      outbox: true
+      outbox: true,
+      leadership: false,
+      lifecycle_stream: false
     }.merge(opts))
   end
 

@@ -41,3 +41,10 @@ production:
   # database: primary
   # outbox: true
 
+  # Follow-ups: single-leader GC, JobHandle#wait, durable event stream
+  # leadership: true
+  # job_results: true
+  # result_ttl: 3600
+  # lifecycle_stream: true
+  # lifecycle_stream_topic: litestack:litejob:events
+
