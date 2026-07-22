@@ -66,6 +66,15 @@ class Litestack::InstallGenerator < Rails::Generators::Base
     end
   end
 
+  def create_recurring_config
+    dest = File.join(destination_root, "config/recurring.yml")
+    if File.exist?(dest)
+      say_status :skip, "config/recurring.yml already exists", :yellow
+    else
+      template "recurring.yml", "config/recurring.yml"
+    end
+  end
+
   def modify_cache_store_adapter
     production = File.join(destination_root, "config/environments/production.rb")
     return unless File.exist?(production)

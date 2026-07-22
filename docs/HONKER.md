@@ -136,6 +136,13 @@ LITEBOARD_QUEUE_PATH=storage/production/queue.sqlite3 bin/liteboard
 
 ---
 
+## Recurring / cron jobs
+
+Independent of Honker (works with polling backends too). YAML schedules enqueue
+into Litejob — see **[RECURRING.md](RECURRING.md)** (`config/recurring.yml`).
+
+---
+
 ## Full activation + substantial benchmark
 
 Step-by-step checklist to turn **on every** Honker-bound LiteJob / LiteCache /

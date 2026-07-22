@@ -1,0 +1,37 @@
+# Recurring / cron tasks for Litejob (issue #101).
+# Solid Queue–inspired shape. Place as config/recurring.yml or set:
+#   recurring_path: "./config/recurring.yml"
+# in litejob options.
+#
+# Requires a Litejobqueue with workers > 0 (not Rails console default).
+# Multi-process: uses Honker leadership lock when available.
+#
+# schedule: cron ("*/5 * * * *") or English ("every 5 minutes", "every hour")
+# every:    integer seconds (alternative to schedule)
+# class:    job class name (Litejob or ActiveJob)
+# args:     optional array
+# queue:    optional (default "default")
+# command:  optional Ruby string eval (use sparingly)
+# enabled:  optional bool (default true)
+
+development:
+  # Example: run every minute in dev
+  # heartbeat_log:
+  #   class: HeartbeatJob
+  #   schedule: every minute
+  #   queue: default
+
+production:
+  # clear_old_records:
+  #   class: ClearOldRecordsJob
+  #   schedule: every day at 3:00
+  #   queue: default
+  #
+  # hourly_metrics:
+  #   class: MetricsSnapshotJob
+  #   schedule: "0 * * * *"
+  #   args: []
+  #
+  # every_five_minutes:
+  #   class: PollExternalApiJob
+  #   every: 300

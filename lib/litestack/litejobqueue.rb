@@ -10,6 +10,7 @@ require_relative "leadership"
 require_relative "job_result_store"
 require_relative "job_handle"
 require_relative "lifecycle"
+require_relative "recurring/scheduler"
 
 ##
 # Litejobqueue is a job queueing and processing system designed for Ruby applications. It is built on top of SQLite, which is an embedded relational database management system that is #lightweight and fast.
@@ -82,7 +83,13 @@ class Litejobqueue < Litequeue
     result_ttl: 3600,
     # Durable lifecycle stream (Honker stream; optional)
     lifecycle_stream: false,
-    lifecycle_stream_topic: "litestack:litejob:events"
+    lifecycle_stream_topic: "litestack:litejob:events",
+    # Recurring tasks (issue #101) — YAML / Hash of schedules
+    #   recurring: { name: { class: "Job", schedule: "*/5 * * * *", args: [] } }
+    #   recurring_path: "./config/recurring.yml"
+    recurring: nil,
+    recurring_path: "./config/recurring.yml",
+    recurring_tick: 5 # seconds between schedule checks
   }
 
   @@queue = nil
@@ -436,6 +443,12 @@ class Litejobqueue < Litequeue
     rescue
       nil
     end
+    begin
+      @recurring_scheduler&.close
+    rescue
+      nil
+    end
+    @recurring_scheduler = nil
 
     super
     @jobs_in_flight = 0
@@ -472,6 +485,10 @@ class Litejobqueue < Litequeue
     # (e.g. Rails console default). Only for destructive litequeue backend.
     @gc = if count > 0 && @job_backend.name != :honker
       track_worker(create_garbage_collector)
+    end
+    # Recurring task ticker (issue #101) — only when workers process jobs
+    @recurring = if count > 0
+      track_worker(create_recurring_scheduler)
     end
     @mutex = Litescheduler::Mutex.new # reinitialize a mutex in setup as the environment could change after forking
   end
@@ -591,6 +608,43 @@ class Litejobqueue < Litequeue
     if payload.is_a?(Array) && payload.length >= 3
     end
     [payload[0], payload[1], payload]
+  end
+
+  # Recurring / cron ticker (Solid Queue–inspired YAML schedules)
+  def create_recurring_scheduler
+    waiter = track_waiter
+    Litescheduler.spawn do
+      begin
+        @recurring_scheduler = Litestack::Recurring::Scheduler.new(self, @options)
+        if @recurring_scheduler.empty?
+          @logger&.info { "[litejob] recurring: no schedules configured" }
+        else
+          n = @recurring_scheduler.definitions.size
+          @logger&.info { "[litejob] recurring: #{n} schedule(s) active" }
+        end
+      rescue => e
+        @logger&.warn { "[litejob] recurring init failed: #{e.class}: #{e.message}" }
+        @recurring_scheduler = nil
+      end
+
+      while @running && @recurring_scheduler && !@recurring_scheduler.empty?
+        begin
+          @recurring_scheduler.tick!
+        rescue => e
+          @logger&.warn { "[litejob] recurring tick: #{e.class}: #{e.message}" }
+        end
+        if @wakeup
+          @wakeup.wait(timeout: @options[:recurring_tick] || 5)
+        else
+          waiter.sleep(@options[:recurring_tick] || 5)
+        end
+      end
+      begin
+        @recurring_scheduler&.close
+      rescue
+        nil
+      end
+    end
   end
 
   # create a gc for dead jobs
@@ -732,6 +786,12 @@ class Litejobqueue < Litequeue
       nil
     end
     @lifecycle = nil
+    begin
+      @recurring_scheduler&.close
+    rescue
+      nil
+    end
+    @recurring_scheduler = nil
     super
   end
 end

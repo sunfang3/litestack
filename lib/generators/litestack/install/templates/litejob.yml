@@ -21,6 +21,9 @@ development:
   # leadership: true
   # job_results: true
   # lifecycle_stream: true   # LiteBoard: /topics/Litejob lifecycle panel
+  # Recurring / cron (issue #101) — see config/recurring.yml and docs/RECURRING.md
+  # recurring_path: "./config/recurring.yml"
+  # recurring_tick: 5
 
 test:
   workers: 0

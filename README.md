@@ -145,7 +145,7 @@ Capability table: **[docs/HONKER.md](docs/HONKER.md)** · full stack: **[docs/RA
 |-----------|------|--------|
 | **Litedb** | SQLite with concurrency-friendly defaults | Active Record `adapter: litedb`, Sequel `litedb://…` |
 | **Litecache** | SQLite-backed cache | Rails `config.cache_store = :litecache` |
-| **Litejob** | Durable job queue | Rails `config.active_job.queue_adapter = :litejob`; **zero workers in Rails console** by default |
+| **Litejob** | Durable job queue + **recurring/cron** | Rails `config.active_job.queue_adapter = :litejob`; **zero workers in Rails console** by default; schedules: **[docs/RECURRING.md](docs/RECURRING.md)** |
 | **Litecable** | Action Cable adapter | `cable.yml` → `adapter: litecable` |
 | **Litesearch** | FTS5 full-text search | AR / Sequel / standalone; optional Chinese + Pinyin |
 | **Litevector** | HNSW vector / kNN search | Optional native **vectorlite** extension |

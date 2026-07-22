@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+- **Recurring tasks** (issue #101): Solid Queue–inspired schedules via
+  `config/recurring.yml` or `recurring:` options. Cron / `every N` / simple
+  English; enqueue into Litejob with slot dedupe + optional Honker leadership.
+  Docs: `docs/RECURRING.md`, sample `samples/recurring.yml`, generator template.
 - **Docs (1.1.0 install)**: README + `docs/RELEASE_GITHUB_PACKAGES.md` cover
   Packages-only install, visibility/`read:packages` permissions, and CI secret
   `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` (no PAT rotation required in-repo).
