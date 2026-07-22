@@ -307,7 +307,7 @@ module Litestack
 
       def interruptible_sleep(seconds)
         deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + seconds.to_f
-        while !@closed
+        until @closed
           remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
           break if remaining <= 0
 
