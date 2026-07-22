@@ -136,6 +136,9 @@ module Litestack
             last_key TEXT
           ) WITHOUT ROWID
         SQL
+      rescue Litestack::ClosedError
+        # Queue closing during teardown — ignore
+        nil
       rescue => e
         warn "[litestack] recurring table: #{e.class}: #{e.message}"
       end

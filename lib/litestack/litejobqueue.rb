@@ -486,9 +486,24 @@ class Litejobqueue < Litequeue
     @gc = if count > 0 && @job_backend.name != :honker
       track_worker(create_garbage_collector)
     end
-    # Recurring task ticker (issue #101) — only when workers process jobs
-    @recurring = if count > 0
-      track_worker(create_recurring_scheduler)
+    # Recurring task ticker (issue #101) — only when workers > 0 AND schedules exist
+    # (do not spawn an empty ticker; it would inflate worker-handle counts).
+    @recurring = nil
+    @recurring_scheduler = nil
+    if count > 0
+      begin
+        sched = Litestack::Recurring::Scheduler.new(self, @options)
+        if sched.empty?
+          sched.close
+        else
+          @recurring_scheduler = sched
+          @recurring = track_worker(create_recurring_scheduler)
+          @logger&.info { "[litejob] recurring: #{sched.definitions.size} schedule(s) active" }
+        end
+      rescue => e
+        @logger&.warn { "[litejob] recurring init failed: #{e.class}: #{e.message}" }
+        @recurring_scheduler = nil
+      end
     end
     @mutex = Litescheduler::Mutex.new # reinitialize a mutex in setup as the environment could change after forking
   end
@@ -610,29 +625,19 @@ class Litejobqueue < Litequeue
     [payload[0], payload[1], payload]
   end
 
-  # Recurring / cron ticker (Solid Queue–inspired YAML schedules)
+  # Recurring / cron ticker loop — scheduler instance is already built in setup.
   def create_recurring_scheduler
     waiter = track_waiter
     Litescheduler.spawn do
-      begin
-        @recurring_scheduler = Litestack::Recurring::Scheduler.new(self, @options)
-        if @recurring_scheduler.empty?
-          @logger&.info { "[litejob] recurring: no schedules configured" }
-        else
-          n = @recurring_scheduler.definitions.size
-          @logger&.info { "[litejob] recurring: #{n} schedule(s) active" }
-        end
-      rescue => e
-        @logger&.warn { "[litejob] recurring init failed: #{e.class}: #{e.message}" }
-        @recurring_scheduler = nil
-      end
-
       while @running && @recurring_scheduler && !@recurring_scheduler.empty?
         begin
           @recurring_scheduler.tick!
+        rescue Litestack::ClosedError
+          break
         rescue => e
           @logger&.warn { "[litejob] recurring tick: #{e.class}: #{e.message}" }
         end
+        break unless @running
         if @wakeup
           @wakeup.wait(timeout: @options[:recurring_tick] || 5)
         else
@@ -644,6 +649,7 @@ class Litejobqueue < Litequeue
       rescue
         nil
       end
+      @recurring_scheduler = nil
     end
   end
 

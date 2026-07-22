@@ -33,7 +33,15 @@ class TestLitejobConsoleWorkers < Minitest::Test
       # Bypass singleton for isolation
       Litejobqueue.reset_singleton!
       q = Litejobqueue.allocate
-      q.send(:initialize, {path: path, logger: nil, sleep_intervals: [0.05], queues: [["default", 1]]}.merge(opts))
+      # Disable recurring schedules so handle counts stay workers+GC only.
+      q.send(:initialize, {
+        path: path,
+        logger: nil,
+        sleep_intervals: [0.05],
+        queues: [["default", 1]],
+        recurring: nil,
+        recurring_path: "/nonexistent-recurring.yml"
+      }.merge(opts))
       yield q
     ensure
       q&.stop rescue nil
