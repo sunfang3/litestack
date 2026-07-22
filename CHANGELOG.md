@@ -1,5 +1,8 @@
 ## [Unreleased]
 
+- **CI simplified**: blocking jobs are only Ruby **4.0.5** and **4.0.6** with
+  Rails **8.1.3** (plus Honker soak/bench on 4.0.5). Dropped lower-bound,
+  latest-Rails, cross-corner, and head matrix jobs.
 - **Recurring tasks** (issue #101): Solid Queue–inspired schedules via
   `config/recurring.yml` or `recurring:` options. Cron / `every N` / simple
   English; enqueue into Litejob with slot dedupe + optional Honker leadership.

@@ -37,8 +37,8 @@ A typical Rails app using Litestack can drop or avoid:
 
 | Runtime | Supported | Unsupported |
 |---------|-----------|-------------|
-| **Ruby** | `>= 4.0` (verified 4.0.0, 4.0.5+) | Ruby &lt; 4.0 |
-| **Rails** (optional) | `>= 8.1, < 9` (verified 8.1.0, 8.1.3) | Rails &lt; 8.1, Rails 9+ |
+| **Ruby** | `>= 4.0` (CI: **4.0.5**, **4.0.6**) | Ruby &lt; 4.0 |
+| **Rails** (optional) | `>= 8.1, < 9` (CI: **8.1.3**) | Rails &lt; 8.1, Rails 9+ |
 | **sqlite3** gem | 2.x | 1.x |
 
 - Rails is **not** a runtime dependency. Standalone: `require "litestack"`.
