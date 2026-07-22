@@ -27,7 +27,7 @@ require "tmpdir"
 require "optparse"
 
 $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
-require "litestack/litecache"
+require "litestack" # full load for Litestack::* errors used on close
 
 module LitecacheL1Bench
   module_function
@@ -168,9 +168,17 @@ module LitecacheL1Bench
       }
     }
 
-    cache.close
+    safe_close(cache)
     FileUtils.rm_rf(dir) if dir
     report
+  end
+
+  def safe_close(cache)
+    return unless cache
+
+    cache.close(timeout: 2)
+  rescue Litestack::ShutdownTimeoutError, Litestack::ClosedError
+    nil
   end
 
   def l1_stats_from(cache)
@@ -247,11 +255,9 @@ module LitecacheL1Bench
     end
   end
 
-  # Cross-process invalidation latency.
-  # Today LiteCache has no L1: we measure "writer set visible to peer get"
-  # as the coherence floor Honker+L1 must not exceed by much, and as a
-  # template for L1 drop latency once implemented.
-  def run_invalidate(samples: 100)
+  # Cross-process L1 drop latency with invalidate: :honker.
+  # Reader warms L1, writer overwrites key, reader waits until L1 misses.
+  def run_invalidate(samples: 50)
     unless honker_available?
       return {
         version: 1,
@@ -262,37 +268,42 @@ module LitecacheL1Bench
       }
     end
 
-    require "honker"
-
     dir = Dir.mktmpdir("litecache-inv-")
     path = File.join(dir, "cache.sqlite3")
-    latencies_ms = []
 
     begin
       reader_ready = File.join(dir, "ready")
-      writer_done = File.join(dir, "done")
       lat_file = File.join(dir, "latencies.json")
 
       reader = fork do
-        cache = build_cache(path)
-        # Optional: open a Honker watcher on the same file so we can later
-        # wait_for_update instead of spinning (measures notify path when wired).
-        hub = begin
-          ::Honker::Database.new(path, watcher_poll_interval_ms: 5)
-        rescue
-          nil
-        end
-
+        cache = build_cache(
+          path,
+          l1: true,
+          invalidate: :honker,
+          l1_ttl: 120,
+          watcher_poll_interval_ms: 5
+        )
+        latencies_ms = []
         File.write(reader_ready, "1")
         samples.times do |i|
           key = "inv-#{i}"
-          # Wait until key appears (L2 visibility) — baseline coherence latency.
-          # Always probe get first; only then wait on the Honker watcher so we
-          # do not floor latency at poll_interval.
-          t_wait0 = mono
+          # Wait until L2 has initial value and fill L1
+          t0 = mono
           loop do
             val = cache.get(key)
-            if val == "v#{i}"
+            break if val == "old-#{i}"
+            raise "timeout waiting for seed" if mono - t0 > 3
+            sleep 0.001
+          end
+          # Confirm L1 hit
+          hit, = cache.instance_variable_get(:@l1).fetch(key)
+          raise "L1 not warm" unless hit
+
+          # Wait for L1 drop after writer overwrites
+          t_wait0 = mono
+          loop do
+            hit, = cache.instance_variable_get(:@l1).fetch(key)
+            unless hit
               latencies_ms << (mono - t_wait0) * 1000.0
               break
             end
@@ -300,34 +311,39 @@ module LitecacheL1Bench
               latencies_ms << (mono - t_wait0) * 1000.0
               break
             end
-            if hub
-              hub.wait_for_update(0.01)
-            else
-              sleep 0.0005
-            end
+            sleep 0.0005
           end
         end
         File.write(lat_file, JSON.generate(latencies_ms))
-        hub&.close
-        cache.close
+        begin
+          cache.close(timeout: 2)
+        rescue
+          nil
+        end
         exit! 0
       end
 
-      # Wait for reader
       deadline = mono + 5
       until File.exist?(reader_ready)
         raise "reader failed to start" if mono > deadline
         sleep 0.01
       end
 
-      writer = build_cache(path)
+      writer = build_cache(
+        path,
+        l1: true,
+        invalidate: :honker,
+        l1_ttl: 120,
+        watcher_poll_interval_ms: 5
+      )
       samples.times do |i|
-        # Brief pause so reader is waiting
-        sleep 0.002
-        writer.set("inv-#{i}", "v#{i}")
-        # If/when transactional notify exists, it would fire inside set.
+        key = "inv-#{i}"
+        writer.set(key, "old-#{i}")
+        # Let reader warm L1
+        sleep 0.01
+        writer.set(key, "new-#{i}")
       end
-      writer.close
+      safe_close(writer)
 
       Process.wait(reader)
       latencies_ms = JSON.parse(File.read(lat_file))
@@ -339,12 +355,12 @@ module LitecacheL1Bench
         captured_at: Time.now.utc.iso8601,
         invalidate: {
           measured: true,
-          kind: "l2_visibility", # becomes "l1_drop" when L1+honker ships
+          kind: "l1_drop",
           samples: sorted.size,
           p50_ms: percentile(sorted, 50),
           p99_ms: percentile(sorted, 99),
           max_ms: sorted.last,
-          mean_ms: sorted.sum / sorted.size
+          mean_ms: sorted.empty? ? 0 : (sorted.sum / sorted.size)
         }
       }
     ensure

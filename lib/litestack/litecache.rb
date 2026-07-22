@@ -1,40 +1,29 @@
 # frozen_stringe_literal: true
 
 # all components should require the support module
+require "oj"
 require_relative "litesupport"
 require_relative "litemetric"
+require_relative "wakeup"
 require_relative "litecache/l1"
+require_relative "litecache/invalidator"
 
 ##
 # Litecache is a caching library for Ruby applications that is built on top of SQLite. It is designed to be simple to use, very fast, and feature-rich, providing developers with a reliable and efficient way to cache data.
 #
-# One of the main features of Litecache is automatic key expiry, which allows developers to set an expiration time for each cached item. This ensures that cached data is automatically removed from the cache after a certain amount of time has passed, reducing the risk of stale data being served to users.
-#
-# In addition, Litecache supports LRU (Least Recently Used) removal, which means that if the cache reaches its capacity limit, the least recently used items will be removed first to make room for new items. This ensures that the most frequently accessed data is always available in the cache.
-#
-# Litecache also supports integer value increment/decrement, which allows developers to increment or decrement the value of a cached item in a thread-safe manner. This is useful for implementing counters or other types of numerical data that need to be updated frequently.
-#
-# Optional process-local L1 (default off): see docs/plans/litecache-l1-honker-design-review.md
+# Optional process-local L1 (default off):
 #   Litecache.new(l1: true, l1_max_entries: 10_000, l1_ttl: 0)
+#
+# Multi-process coherence (requires l1):
+#   invalidate: :none   — same-process only (default)
+#   invalidate: :ttl    — soft L1 TTL bound (eventual)
+#   invalidate: :honker — Honker notify on the cache file + listener drops peer L1
+#
+# See docs/plans/litecache-l1-honker-design-review.md
 
 class Litecache
   include Litesupport::Liteconnection
   include Litemetric::Measurable
-
-  # the default options for the cache
-  # can be overridden by passing new options in a hash
-  # to Litecache.new
-  #   path: "./cache.db"
-  #   expiry: 60 * 60 * 24 * 30 -> one month default expiry if none is provided
-  #   size: 128 * 1024 * 1024 -> 128MB
-  #   mmap_size: 128 * 1024 * 1024 -> 128MB to be held in memory
-  #   min_size: 32 * 1024 -> 32KB
-  #   return_full_record: false -> only return the payload
-  #   sleep_interval: 1 -> 1 second of sleep between cleanup runs
-  #   l1: false -> process-local L1 (opt-in)
-  #   l1_max_entries: 10_000
-  #   l1_max_value_bytes: 65_536 — skip L1 for larger values
-  #   l1_ttl: 0 — soft TTL in seconds (0 = only explicit delete/clear/L2 miss)
 
   DEFAULT_OPTIONS = {
     path: -> { Litesupport.root.join("cache.sqlite3") },
@@ -47,29 +36,18 @@ class Litecache
     return_full_record: false, # only return the payload
     sleep_interval: 30, # 30 seconds
     metrics: false,
+    # L1 (opt-in)
     l1: false,
     l1_max_entries: 10_000,
     l1_max_value_bytes: 65_536,
-    l1_ttl: 0
+    l1_ttl: 0,
+    l1_ttl_default: 5, # used when invalidate forces a soft TTL
+    # Coherence: :none | :ttl | :honker
+    invalidate: :none,
+    notify_ops: [:set, :delete, :clear],
+    notify_channel: "litecache",
+    watcher_poll_interval_ms: 5
   }
-
-  # creates a new instance of Litecache
-  # can optionally receive an options hash which will be merged
-  # with the DEFAULT_OPTIONS (the new hash overrides any matching keys in the default one).
-  #
-  # Example:
-  #   litecache = Litecache.new
-  #
-  #   litecache.set("a", "somevalue")
-  #   litecache.get("a") # =>  "somevalue"
-  #
-  #   litecache.set("b", "othervalue", 1) # expire aftre 1 second
-  #   litecache.get("b") # => "othervalue"
-  #   sleep 2
-  #   litecache.get("b") # => nil
-  #
-  #   litecache.clear # nothing remains in the cache
-  #   litecache.close # optional, you can safely kill the process
 
   def initialize(options = {})
     options[:size] = DEFAULT_OPTIONS[:min_size] if options[:size] && options[:size] < DEFAULT_OPTIONS[:min_size]
@@ -83,7 +61,14 @@ class Litecache
     key = key.to_s
     expires_in ||= @expires_in
     begin
-      run_stmt(:setter, key, value, expires_in)
+      if notify_write?(:set)
+        transaction do |conn|
+          run_stmt(:setter, key, value, expires_in)
+          @invalidator.notify_on_connection(conn, op: :set, key: key)
+        end
+      else
+        run_stmt(:setter, key, value, expires_in)
+      end
       capture(:set, key)
     rescue SQLite3::FullException
       transaction do
@@ -99,22 +84,27 @@ class Litecache
   # set multiple keys and values in one shot set_multi({k1: v1, k2: v2, ... })
   def set_multi(keys_and_values, expires_in = nil)
     expires_in ||= @expires_in
+    written = []
     transaction do |conn|
       keys_and_values.each_pair do |k, v|
         key = k.to_s
         run_stmt(:setter, key, v, expires_in)
         capture(:set, key)
         l1_set(key, v, expires_in: expires_in)
+        written << key
       rescue SQLite3::FullException
         run_stmt(extra_pruner, 0.2)
         run_sql("vacuum")
         retry
       end
+      if written.any? && notify_write?(:set)
+        @invalidator.notify_on_connection(conn, op: :mset, keys: written)
+      end
     end
     true
   end
 
-  # add a key, value pair to the cache, but only if the key doesn't exist, with an optional expiry value (number of seconds)
+  # add a key, value pair to the cache, but only if the key doesn't exist
   def set_unless_exists(key, value, expires_in = nil)
     key = key.to_s
     expires_in ||= @expires_in
@@ -123,6 +113,15 @@ class Litecache
       cache.transaction(:immediate) do
         cache.stmts[:inserter].execute!(key, value, expires_in)
         changes = cache.changes
+        if changes > 0 && notify_write?(:set) && @honker_extension_loaded
+          cache.execute(
+            "SELECT notify(?, ?)",
+            [
+              @options[:notify_channel] || "litecache",
+              Oj.dump({"op" => "set", "key" => key, "src" => @invalidator&.instance_id})
+            ]
+          )
+        end
       end
       capture(:set, key)
     rescue SQLite3::FullException
@@ -136,8 +135,6 @@ class Litecache
     changes > 0
   end
 
-  # get a value by its key
-  # if the key doesn't exist or it is expired then null will be returned
   def get(key)
     key = key.to_s
     hit, value = l1_fetch(key)
@@ -147,18 +144,15 @@ class Litecache
     end
     if (record = run_stmt(:getter, key)[0])
       value = record[1]
-      # Approximate remaining TTL for L1 soft expiry (best-effort from L2 expires_in unix)
       l1_set(key, value, expires_in: remaining_ttl_from_record(record))
       capture(:get, key, 1)
       return value
     end
-    l1_delete(key) # ensure stale L1 cannot linger if L2 expired
+    l1_delete(key)
     capture(:get, key, 0)
     nil
   end
 
-  # get multiple values by their keys, a hash with values corresponding to the keys
-  # is returned,
   def get_multi(*keys)
     results = {}
     missing = []
@@ -194,33 +188,46 @@ class Litecache
     results
   end
 
-  # delete a key, value pair from the cache
   def delete(key)
     key = key.to_s
-    changes = 0
-    @conn.acquire do |cache|
-      cache.stmts[:deleter].execute!(key)
-      changes = cache.changes
+    deleted = false
+    if notify_write?(:delete)
+      transaction do |conn|
+        res = run_stmt(:deleter, key)
+        deleted = res && !res.empty?
+        @invalidator.notify_on_connection(conn, op: :delete, key: key)
+      end
+    else
+      @conn.acquire do |cache|
+        cache.stmts[:deleter].execute!(key)
+        deleted = cache.changes > 0
+      end
     end
     l1_delete(key)
-    changes > 0
+    deleted
   end
 
-  # increment an integer value by amount, optionally add an expiry value (in seconds)
   def increment(key, amount = 1, expires_in = nil)
     key = key.to_s
     expires_in ||= @expires_in
-    # Counters stay L2-authoritative; drop L1 to avoid cross-read races.
+    # Counters stay L2-authoritative; drop L1 and ask peers to drop too.
     l1_delete(key)
-    @conn.acquire { |cache| cache.stmts[:incrementer].execute!(key, amount, expires_in)[0][0] }
+    result = nil
+    if notify_write?(:delete)
+      transaction do |conn|
+        result = run_stmt(:incrementer, key, amount, expires_in)[0][0]
+        @invalidator.notify_on_connection(conn, op: :delete, key: key)
+      end
+    else
+      result = @conn.acquire { |cache| cache.stmts[:incrementer].execute!(key, amount, expires_in)[0][0] }
+    end
+    result
   end
 
-  # decrement an integer value by amount, optionally add an expiry value (in seconds)
   def decrement(key, amount = 1, expires_in = nil)
     increment(key, -amount, expires_in)
   end
 
-  # delete all entries in the cache up limit (ordered by LRU), if no limit is provided approximately 20% of the entries will be deleted
   def prune(limit = nil)
     @conn.acquire do |cache|
       if limit&.is_a? Integer
@@ -231,34 +238,43 @@ class Litecache
         cache.stmts[:pruner].execute!
       end
     end
-    # L2 prune may drop arbitrary keys — flush L1 to avoid serving orphans.
     l1_clear
+    if notify_write?(:clear)
+      transaction do |conn|
+        @invalidator.notify_on_connection(conn, op: :clear)
+      end
+    end
   end
 
-  # return the number of key, value pairs in the cache
   def count
     run_stmt(:counter)[0][0]
   end
 
-  # return the actual size of the cache file
-  # def size
-  #  run_stmt(:sizer)[0][0]
-  # end
-
-  # delete all key, value pairs in the cache
   def clear
-    run_sql("delete FROM data")
+    if notify_write?(:clear)
+      transaction do |conn|
+        run_sql("delete FROM data")
+        @invalidator.notify_on_connection(conn, op: :clear)
+      end
+    else
+      run_sql("delete FROM data")
+    end
     l1_clear
   end
 
-  # close the connection to the cache file (idempotent via Liteconnection)
   def close(timeout: shutdown_timeout)
     @running = false
+    wake_workers!
+    begin
+      @invalidator&.close
+    rescue
+      nil
+    end
+    @invalidator = nil
     l1_clear
     super
   end
 
-  # return the maximum size of the cache
   def max_size
     run_sql("SELECT s.page_size * c.max_page_count FROM pragma_page_size() as s, pragma_max_page_count() as c")[0][0].to_f / (1024 * 1024)
   end
@@ -281,9 +297,15 @@ class Litecache
     !!@l1
   end
 
+  def invalidate_mode
+    (@options[:invalidate] || :none).to_sym
+  end
+
   def l1_stats
     if @l1
-      @l1.stats
+      stats = @l1.stats
+      stats[:honker] = !!@invalidator&.enabled
+      stats
     else
       {
         enabled: false,
@@ -291,7 +313,8 @@ class Litecache
         misses: 0,
         hit_rate: 0.0,
         entries: 0,
-        invalidate_mode: "none"
+        invalidate_mode: invalidate_mode.to_s,
+        honker: false
       }
     end
   end
@@ -299,9 +322,56 @@ class Litecache
   private
 
   def setup
+    begin
+      @invalidator&.close
+    rescue
+      nil
+    end
+    @invalidator = nil
+
+    normalize_coherence_options!
     super # create connection
     @l1 = build_l1
-    @bgthread = track_worker(spawn_worker) # create background pruner thread
+    setup_invalidator!
+    @bgthread = track_worker(spawn_worker)
+  end
+
+  def normalize_coherence_options!
+    mode = (@options[:invalidate] || :none).to_s.to_sym
+    mode = :none unless %i[none ttl honker].include?(mode)
+    @options[:invalidate] = mode
+
+    case mode
+    when :ttl
+      @options[:l1] = true
+      if @options[:l1_ttl].to_f <= 0
+        @options[:l1_ttl] = (@options[:l1_ttl_default] || 5).to_f
+      end
+    when :honker
+      @options[:l1] = true
+      # Soft TTL backstop if notify is lost
+      if @options[:l1_ttl].to_f <= 0
+        @options[:l1_ttl] = (@options[:l1_ttl_default] || 5).to_f
+      end
+    end
+  end
+
+  def setup_invalidator!
+    return unless invalidate_mode == :honker
+
+    inv = Invalidator.new(self, options: @options)
+    if inv.setup!
+      @invalidator = inv
+    else
+      warn "[litecache] invalidate:honker unavailable; falling back to invalidate:ttl"
+      @options[:invalidate] = :ttl
+      if @options[:l1_ttl].to_f <= 0
+        @options[:l1_ttl] = (@options[:l1_ttl_default] || 5).to_f
+      end
+      # Rebuild L1 with ttl mode label
+      @l1 = build_l1
+      @invalidator = nil
+    end
   end
 
   def build_l1
@@ -310,12 +380,17 @@ class Litecache
     L1.new(
       max_entries: @options[:l1_max_entries] || 10_000,
       max_value_bytes: @options[:l1_max_value_bytes] || 65_536,
-      ttl: @options[:l1_ttl] || 0
+      ttl: @options[:l1_ttl] || 0,
+      invalidate_mode: invalidate_mode.to_s
     )
   end
 
   def truthy?(v)
     v == true || v.to_s == "true" || v.to_s == "1"
+  end
+
+  def notify_write?(op)
+    @invalidator&.notifies?(op)
   end
 
   def l1_fetch(key)
@@ -342,7 +417,6 @@ class Litecache
     @l1.clear
   end
 
-  # record = [id, value, expires_in_unix] from getter
   def remaining_ttl_from_record(record)
     exp = record[2]
     return nil unless exp
@@ -383,6 +457,20 @@ class Litecache
       conn.journal_size_limit = [(@options[:size] / 2).to_i, @options[:min_size]].min
       conn.max_page_count = (@options[:size] / conn.page_size).to_i
       conn.case_sensitive_like = true
+      maybe_load_honker_extension(conn)
     end
+  end
+
+  def maybe_load_honker_extension(conn)
+    @honker_extension_loaded = false
+    return unless invalidate_mode == :honker
+    return unless Litestack::Wakeup::Honker.watchable_path?(@options[:path])
+    return unless Litestack::Wakeup::Honker.load_honker_gem!
+
+    ::Honker.setup(conn, extension_path: @options[:honker_extension_path])
+    @honker_extension_loaded = true
+  rescue => e
+    @honker_extension_loaded = false
+    @logger&.warn { "[litecache] could not load honker extension: #{e.message}" }
   end
 end

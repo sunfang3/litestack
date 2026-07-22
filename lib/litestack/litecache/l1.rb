@@ -10,11 +10,12 @@ class Litecache
 
     attr_reader :hits, :misses
 
-    def initialize(max_entries: 10_000, max_value_bytes: 65_536, ttl: 0)
+    def initialize(max_entries: 10_000, max_value_bytes: 65_536, ttl: 0, invalidate_mode: "none")
       @max_entries = [max_entries.to_i, 1].max
       @max_value_bytes = [max_value_bytes.to_i, 0].max
       @ttl = ttl.to_f
       @ttl = 0 if @ttl.negative?
+      @invalidate_mode = invalidate_mode.to_s
       @mutex = Mutex.new
       @map = {}
       @hits = 0
@@ -93,7 +94,7 @@ class Litecache
           max_entries: @max_entries,
           max_value_bytes: @max_value_bytes,
           ttl: @ttl,
-          invalidate_mode: "none"
+          invalidate_mode: @invalidate_mode
         }
       end
     end

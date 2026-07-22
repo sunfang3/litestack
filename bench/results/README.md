@@ -8,16 +8,19 @@ load. Do not treat checked-in numbers as universal truth.
 ## LiteCache L1 / regression gate
 
 ```sh
-# Capture a baseline for *this* machine
+# Capture a baseline for *this* machine (L1 off)
 bundle exec ruby bench/bench_litecache_l1.rb baseline
 
 # After a change, fail if IPS drops below 95% of that baseline
 bundle exec ruby bench/bench_litecache_l1.rb compare
 
-# Cross-process L2 visibility / future L1 invalidate latency
+# L1 on, same-process hot-key reads
+bundle exec ruby bench/bench_litecache_l1.rb l1_local
+
+# Cross-process L1 drop latency (invalidate: :honker)
 bundle exec ruby bench/bench_litecache_l1.rb invalidate
 
-# Both
+# baseline + l1_local + invalidate
 bundle exec ruby bench/bench_litecache_l1.rb all
 ```
 

@@ -206,13 +206,13 @@ CI policy (recommended):
 | Step | Work | Exit criteria |
 |------|------|----------------|
 | 0 | Design review + baseline bench (this doc + script) | ✅ |
-| 1 | L1 module + hooks, default off | ✅ `lib/litestack/litecache/l1.rb`; `compare` gate |
-| 2 | L1 fill on get/set; LRU + size skip + soft TTL | ✅ `l1: true` opt-in; `l1_local` bench |
-| 3 | Soft TTL as multi-process backstop (`invalidate: :ttl`) | next |
-| 4 | Honker transactional notify + listener | next |
-| 5 | Rails adapter smoke + multi-process soak | later |
+| 1 | L1 module + hooks, default off | ✅ |
+| 2 | L1 fill on get/set; LRU + size skip + soft TTL | ✅ |
+| 3 | Soft TTL multi-process backstop (`invalidate: :ttl`) | ✅ auto l1 + default TTL |
+| 4 | Honker transactional notify + listener | ✅ `invalidate: :honker`; bench `l1_drop` |
+| 5 | Rails adapter soak / default-on decision | later |
 
-**Do not** flip `l1: true` by default until step 4 gates pass.
+**Do not** flip `l1: true` / `invalidate: :honker` by default until product soak and write-tax gates are accepted.
 
 ---
 

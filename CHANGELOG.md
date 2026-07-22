@@ -26,7 +26,12 @@ LiteJob and LiteCable can use the optional [`honker`](https://github.com/russell
   `bench/bench_litecache_l1.rb` (`baseline` / `l1_local` / `compare` / `invalidate`).
 - **LiteCache process-local L1** (opt-in, default off): `l1: true` with LRU
   (`l1_max_entries`), size skip (`l1_max_value_bytes`), optional soft TTL
-  (`l1_ttl`). Same-process only; Honker invalidate is not enabled yet.
+  (`l1_ttl`).
+- **LiteCache multi-process coherence** (opt-in):
+  - `invalidate: :ttl` — soft L1 TTL bound (eventual consistency)
+  - `invalidate: :honker` — same-file transactional `notify` + listener drops
+    peer L1 (`notify_ops`, `notify_channel`); falls back to `:ttl` if Honker
+    is unavailable. Soft TTL remains a lost-notify backstop.
 
 ## [1.0.0] - 2026-07-17
 
