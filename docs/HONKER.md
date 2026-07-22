@@ -137,6 +137,31 @@ LITEBOARD_QUEUE_PATH=storage/production/queue.sqlite3 bin/liteboard
 
 ---
 
+## Status probe (is Honker active?)
+
+```bash
+# Live probe: gem load + LiteJob wakeup/backend + LiteCache invalidate + LiteCable transport
+bundle exec rake litestack:honker:status
+
+# Use your queue file (default: ephemeral tmp path)
+LITESTACK_HONKER_PATH=storage/production/queue.sqlite3 bundle exec rake litestack:honker:status
+
+# Fail-closed (exit 1 if gem missing, path not watchable, or any adapter inactive)
+LITESTACK_HONKER_STRICT=1 bundle exec rake litestack:honker:status
+```
+
+From Ruby (boot check):
+
+```ruby
+report = Litestack::HonkerStatus.check(path: "storage/production/queue.sqlite3", strict: true)
+abort Litestack::HonkerStatus.format(report) unless report[:ok]
+```
+
+Expect `litejob.wakeup: active`, `litejob.backend: active`, `litecache.invalidate: active`,
+`litecable.transport: active` when the gem is installed and the path is a real file.
+
+---
+
 ## CI / soak / benches
 
 ```bash
@@ -163,6 +188,6 @@ GitHub Actions job **Honker soak + LiteCache bench** runs on every push/PR to
 | Symptom | Check |
 |---------|--------|
 | `Authentication is required for rubygems.pkg.github.com` | `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` or `bundle config` |
-| Feature silently falls back to polling | Honker load error, `:memory:` path, or extension missing |
+| Feature silently falls back to polling | `rake litestack:honker:status`; Honker load error, `:memory:` path, or extension missing |
 | LiteBoard “lifecycle inactive” | `lifecycle_stream: true`, file path, `LITEBOARD_QUEUE_PATH` |
 | Multi-worker stale cache with L1 | `invalidate: :honker` (or `:ttl`) and shared cache file path |

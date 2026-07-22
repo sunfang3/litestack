@@ -40,7 +40,8 @@ namespace :test do
       "test/test_litejob_outbox.rb",
       "test/test_litejob_results_lifecycle.rb",
       "test/test_liteboard_lifecycle.rb",
-      "test/test_sql_table_prefix.rb"
+      "test/test_sql_table_prefix.rb",
+      "test/test_honker_status.rb"
     ]
     t.warning = false
   end
@@ -50,6 +51,17 @@ namespace :soak do
   desc "Finite multi-process Honker soak (LiteJob claim + LiteCache L1 drop)"
   task :honker do
     sh "bundle exec ruby scripts/soak_honker.rb"
+  end
+end
+
+namespace :litestack do
+  namespace :honker do
+    desc "Report whether Honker gem loads and components activate (LITESTACK_HONKER_STRICT=1 to fail-closed)"
+    task :status do
+      require "litestack"
+      code = Litestack::HonkerStatus.run_cli!
+      exit code
+    end
   end
 end
 

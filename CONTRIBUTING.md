@@ -55,6 +55,7 @@ For each issue:
 ```bash
 bundle exec rake test          # unit/integration contracts (preloads coverage)
 bundle exec rake test:honker   # Honker-related subset
+bundle exec rake litestack:honker:status  # gem + live adapter probe
 bundle exec rake soak:honker   # multi-process finite soak
 bundle exec rake bench:litecache_l1  # L1 baseline + compare gate
 bundle exec rake standard      # Ruby 4 Standard

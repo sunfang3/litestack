@@ -53,6 +53,10 @@ LiteJob and LiteCable can use the optional [`honker`](https://github.com/russell
 - **CI + soak**: workflow authenticates to GitHub Packages for `honker`;
   `rake test:honker`, `rake soak:honker` (`scripts/soak_honker.rb`), and
   `rake bench:litecache_l1` (baseline + compare) on exact-target / soak jobs.
+- **Honker status probe**: `rake litestack:honker:status` /
+  `Litestack::HonkerStatus` reports gem load and live activation of LiteJob
+  wakeup/backend, LiteCache invalidate, and LiteCable transport
+  (`LITESTACK_HONKER_STRICT=1` for fail-closed exit).
 
 ## [1.0.0] - 2026-07-17
 

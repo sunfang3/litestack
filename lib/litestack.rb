@@ -13,6 +13,7 @@ require_relative "litestack/litecache"
 require_relative "litestack/litejob"
 require_relative "litestack/litecable"
 require_relative "litestack/litekd"
+require_relative "litestack/honker_status"
 
 # Conditionally load optional peer integrations.
 # Rails version gating happens inside each Rails-facing entry point — not here —
