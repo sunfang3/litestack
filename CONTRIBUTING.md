@@ -2,12 +2,13 @@
 
 ## Supported development stack
 
-- Ruby **4.0.5** (see `.ruby-version`)
+- Ruby **4.0.5** (see `.ruby-version`) / CI also **4.0.6**
 - Rails **8.1.3** (default `Gemfile`)
 - Bundler 4
 - sqlite3 2.x
 
-Lower-bound CI also runs Ruby 4.0.0 + Rails 8.1.0 (`gemfiles/rails81_min.gemfile`).
+CI (`.github/workflows/ruby.yml`) only blocks on **Ruby 4.0.5 + 4.0.6** with
+Rails **8.1.3**, plus a Honker soak/bench job on 4.0.5.
 
 ## Setup
 
