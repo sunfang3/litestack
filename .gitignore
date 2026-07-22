@@ -13,6 +13,9 @@
 Gemfile.lock
 .worktrees/
 
+# Local benchmark captures (machine-specific IPS)
+/bench/results/*.json
+
 # Built gem artifacts
 *.gem
 

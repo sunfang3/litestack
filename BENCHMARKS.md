@@ -65,6 +65,19 @@ For most applications, even with higher level of concurrency, Litedb will scale 
 
 > ![litecache](https://github.com/oldmoe/litestack/blob/master/assets/litecache_logo_teal.png?raw=true)
 
+### LiteCache L1 / invalidation regression harness
+
+Before enabling a process-local L1 (or Honker invalidate broadcasts), capture a
+machine-local baseline and re-check after each change:
+
+```sh
+bundle exec ruby bench/bench_litecache_l1.rb baseline
+bundle exec ruby bench/bench_litecache_l1.rb compare    # exit 2 on >5% IPS drop
+bundle exec ruby bench/bench_litecache_l1.rb invalidate # cross-process visibility p50/p99
+```
+
+See `docs/plans/litecache-l1-honker-design-review.md` and `bench/results/README.md`.
+
 For testing the cache we attempted to try writing and reading different payload sizes with a fixed key size
 
 ### Write
