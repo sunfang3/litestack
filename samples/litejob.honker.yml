@@ -41,10 +41,14 @@ production:
   # database: primary
   # outbox: true
 
-  # Follow-ups: single-leader GC, JobHandle#wait, durable event stream
+  # Leadership GC, JobHandle#wait, durable event stream (LiteBoard feed)
   # leadership: true
   # job_results: true
   # result_ttl: 3600
   # lifecycle_stream: true
   # lifecycle_stream_topic: litestack:litejob:events
+  #
+  # LiteBoard: open /topics/Litejob — "Job lifecycle stream" panel polls
+  # /topics/Litejob/lifecycle.json. Point at this queue file with:
+  #   LITEBOARD_QUEUE_PATH=storage/production/queue.sqlite3 liteboard
 

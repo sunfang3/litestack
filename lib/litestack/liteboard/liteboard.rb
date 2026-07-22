@@ -8,6 +8,8 @@ require "cgi"
 require "uri"
 
 require_relative "../../litestack/litemetric"
+require_relative "../../litestack/litesupport"
+require_relative "../../litestack/lifecycle"
 
 class Liteboard
   class BadRequestError < StandardError; end
@@ -20,7 +22,16 @@ class Liteboard
     "x-content-type-options" => "nosniff",
     "referrer-policy" => "no-referrer",
     "x-frame-options" => "DENY",
-    "content-security-policy" => "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+    "content-security-policy" => "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; connect-src 'self'"
+  }.freeze
+
+  JSON_HEADERS = {
+    "content-type" => "application/json; charset=utf-8",
+    "cache-control" => "no-cache",
+    "x-content-type-options" => "nosniff",
+    "referrer-policy" => "no-referrer",
+    "x-frame-options" => "DENY",
+    "content-security-policy" => "default-src 'none'; frame-ancestors 'none'"
   }.freeze
 
   @@resolutions = {"minute" => [300, 12], "hour" => [3600, 24], "day" => [3600 * 24, 7], "week" => [3600 * 24 * 7, 53], "year" => [3600 * 24 * 365, 100]}
@@ -45,6 +56,8 @@ class Liteboard
       new(env).call(:index)
     when %r{\A/assets/(liteboard\.(css|js))\z}
       serve_asset(Regexp.last_match(1))
+    when "/topics/Litejob/lifecycle.json"
+      new(env).lifecycle_json
     when *TOPIC_ROUTES.keys
       new(env).call(TOPIC_ROUTES[path])
     else
@@ -243,9 +256,24 @@ class Liteboard
       @processing_time_over_time = @processed_jobs ? (@processed_jobs["values"] || []) : []
       @processed_count_over_time_by_queues = [["Time"]]
       @processing_time_over_time_by_queues = [["Time"]]
-      @empty_state = @events.empty? && @jobs.to_i.zero?
+      @lifecycle_feed = load_lifecycle_feed
+      @empty_state = @events.empty? && @jobs.to_i.zero? && !@lifecycle_feed[:enabled]
       render :litejob
     end
+  end
+
+  # JSON feed for Litejob lifecycle stream (Honker). Polled by liteboard.js.
+  def lifecycle_json
+    limit = begin
+      Integer(params(:limit))
+    rescue
+      40
+    end
+    limit = 40 if limit <= 0
+    feed = load_lifecycle_feed(limit: [limit, 200].min)
+    [200, JSON_HEADERS.dup, [JSON.generate(feed)]]
+  rescue => e
+    [200, JSON_HEADERS.dup, [JSON.generate({enabled: false, events: [], reason: e.message})]]
   end
 
   def litecable
@@ -435,6 +463,40 @@ class Liteboard
     end
   rescue
     []
+  end
+
+  # Resolve the Litejob queue SQLite path for lifecycle stream reads.
+  # Override with LITEBOARD_QUEUE_PATH or LITEJOB_PATH.
+  def lifecycle_queue_path
+    env_path = ENV["LITEBOARD_QUEUE_PATH"] || ENV["LITEJOB_PATH"]
+    return env_path if env_path && !env_path.empty?
+
+    snap_path = begin
+      snap_dig(@snapshot, :path, nil) if @snapshot
+    rescue
+      nil
+    end
+    return snap_path.to_s if snap_path && !snap_path.to_s.empty? && snap_path.to_s != ":memory:"
+
+    Litesupport.root.join("queue.sqlite3").to_s
+  end
+
+  def load_lifecycle_feed(limit: 40)
+    path = lifecycle_queue_path
+    topic = ENV["LITEBOARD_LIFECYCLE_TOPIC"] || Litestack::Lifecycle::DEFAULT_TOPIC
+    feed = Litestack::Lifecycle.read_recent(path: path, topic: topic, limit: limit)
+    feed[:path] = path
+    feed
+  rescue => e
+    {enabled: false, events: [], reason: e.message, path: lifecycle_queue_path}
+  end
+
+  def format_lifecycle_time(at)
+    return "—" if at.nil?
+
+    Time.at(at.to_f).utc.strftime("%Y-%m-%d %H:%M:%S UTC")
+  rescue
+    at.to_s
   end
 
   def render(tpl_name)

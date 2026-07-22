@@ -151,4 +151,76 @@
   &nbsp;<br/>
   </div>
 
+  <div class="row">
+    <div class="col">
+      <div class="card" id="lifecycle-card"
+           data-lifecycle-url="/topics/Litejob/lifecycle.json"
+           data-lifecycle-poll="5000">
+        <div class="card-header">
+          Job lifecycle stream
+          <span class="lb-muted" id="lifecycle-status">
+            <% if @lifecycle_feed && @lifecycle_feed[:enabled] %>
+              live · <%= h(@lifecycle_feed[:topic]) %>
+            <% else %>
+              inactive
+            <% end %>
+          </span>
+        </div>
+        <div class="card-body">
+          <% if @lifecycle_feed.nil? || !@lifecycle_feed[:enabled] %>
+            <div class="lb-empty" role="status">
+              <p><strong>No lifecycle stream.</strong></p>
+              <p class="lb-muted">
+                Enable with <code>lifecycle_stream: true</code> on Litejobqueue
+                (requires the <code>honker</code> gem and a file-backed queue path).
+                <% if @lifecycle_feed && @lifecycle_feed[:reason] %>
+                  <br/>Reason: <%= h(@lifecycle_feed[:reason]) %>
+                <% end %>
+                <% if @lifecycle_feed && @lifecycle_feed[:path] %>
+                  <br/>Looking at: <code><%= h(@lifecycle_feed[:path]) %></code>
+                <% end %>
+              </p>
+            </div>
+          <% else %>
+            <p class="lb-muted">
+              Recent events from Honker stream
+              <code><%= h(@lifecycle_feed[:topic]) %></code>
+              on <code><%= h(@lifecycle_feed[:path]) %></code>.
+              Auto-refreshes every 5s when JavaScript is available.
+            </p>
+            <div class="lb-table-wrap">
+              <table class="lb-table" id="lifecycle-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Time (UTC)</th>
+                    <th scope="col">Event</th>
+                    <th scope="col">Job</th>
+                    <th scope="col">Class</th>
+                    <th scope="col">Queue</th>
+                    <th scope="col">Detail</th>
+                  </tr>
+                </thead>
+                <tbody id="lifecycle-tbody">
+                  <% Array(@lifecycle_feed[:events]).reverse_each do |ev| %>
+                    <tr>
+                      <td><%= h(format_lifecycle_time(ev[:at])) %></td>
+                      <td><code><%= h(ev[:event]) %></code></td>
+                      <td><code><%= h(ev[:job_id]) %></code></td>
+                      <td><%= h(ev[:klass]) %></td>
+                      <td><%= h(ev[:queue]) %></td>
+                      <td class="lb-muted"><%= h(ev[:error] || (ev[:delay] ? "delay=#{ev[:delay]}" : "")) %></td>
+                    </tr>
+                  <% end %>
+                  <% if Array(@lifecycle_feed[:events]).empty? %>
+                    <tr><td colspan="6" class="lb-muted">Stream is empty — enqueue a job to see events.</td></tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </section>

@@ -36,6 +36,10 @@ LiteJob and LiteCable can use the optional [`honker`](https://github.com/russell
   install generator adds `config/litecache.yml` and production `cache_store`
   path under `storage/`; docs + `samples/litecache.honker.yml`. Defaults remain
   L1 off.
+- **LiteBoard job lifecycle feed**: Litejob topic page shows Honker lifecycle
+  stream events (`lifecycle_stream: true`); JSON at
+  `/topics/Litejob/lifecycle.json` with 5s JS poll. Path via
+  `LITEBOARD_QUEUE_PATH` / `LITEJOB_PATH` / default queue.sqlite3.
 
 ## [1.0.0] - 2026-07-17
 

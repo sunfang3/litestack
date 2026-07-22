@@ -141,6 +141,34 @@ input, select {
   margin: 0.5rem 0;
 }
 
+.lb-muted { color: var(--lb-muted); font-size: 0.9em; }
+.lb-table-wrap { overflow-x: auto; margin-top: 0.5rem; }
+.lb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.lb-table th,
+.lb-table td {
+  border-bottom: 1px solid #e0e8ea;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+.lb-table th {
+  font-weight: 600;
+  color: var(--lb-accent);
+}
+.lb-table code {
+  font-size: 0.85em;
+  word-break: break-all;
+}
+#lifecycle-status {
+  float: right;
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;
