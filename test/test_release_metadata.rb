@@ -4,8 +4,8 @@ require_relative "helper"
 require "rubygems"
 
 class TestReleaseMetadata < Minitest::Test
-  def test_version_is_1_1_0
-    assert_equal "1.1.0", Litestack::VERSION
+  def test_version_is_1_1_1
+    assert_equal "1.1.1", Litestack::VERSION
   end
 
   def test_gemspec_ruby_and_no_rails_runtime
@@ -23,8 +23,9 @@ class TestReleaseMetadata < Minitest::Test
     assert_equal "https://rubygems.pkg.github.com/sunfang3", spec.metadata["allowed_push_host"]
   end
 
-  def test_changelog_has_1_1_0_section
+  def test_changelog_has_1_1_1_section
     changelog = File.read(File.expand_path("../CHANGELOG.md", __dir__))
+    assert_match(/\[1\.1\.1\]/, changelog)
     assert_match(/\[1\.1\.0\]/, changelog)
     assert_match(/\[1\.0\.0\]/, changelog)
   end

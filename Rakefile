@@ -177,7 +177,7 @@ namespace :release do
   desc "Release-candidate dry run: build, verify, install — never push"
   task dry_run: ["package:verify"] do
     require_relative "lib/litestack/version"
-    abort "VERSION must be 1.1.0 for this release" unless Litestack::VERSION == "1.1.0"
+    abort "VERSION must be 1.1.1 for this release" unless Litestack::VERSION == "1.1.1"
     puts "release:dry_run OK for litestack-#{Litestack::VERSION} (no push/tag)"
   end
 

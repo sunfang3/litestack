@@ -57,7 +57,7 @@ A typical Rails app using Litestack can drop or avoid:
 source "https://rubygems.org"
 
 source "https://rubygems.pkg.github.com/sunfang3" do
-  gem "litestack", "1.1.0"
+  gem "litestack", "1.1.1"
   # optional peer for multi-worker wake / L1 / claim / lifecycle:
   gem "honker", "0.4.0"
 end

@@ -42,7 +42,7 @@ account when the dedicated secret is absent.
 source "https://rubygems.org"
 
 source "https://rubygems.pkg.github.com/sunfang3" do
-  gem "litestack", "1.1.0"
+  gem "litestack", "1.1.1"
   gem "honker", "0.4.0"   # optional — enable for wakeup / L1 / cable / lifecycle
 end
 ```

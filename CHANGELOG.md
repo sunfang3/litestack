@@ -1,20 +1,32 @@
 ## [Unreleased]
 
-- **CI simplified**: blocking jobs are only Ruby **4.0.5** and **4.0.6** with
-  Rails **8.1.3** (plus Honker soak/bench on 4.0.5). Dropped lower-bound,
-  latest-Rails, cross-corner, and head matrix jobs.
+## [1.1.1] - 2026-07-22
+
+Published to **GitHub Packages** (`rubygems.pkg.github.com/sunfang3`).
+
+### Added
+
 - **Recurring tasks** (issue #101): Solid Queue–inspired schedules via
   `config/recurring.yml` or `recurring:` options. Cron / `every N` / simple
   English; enqueue into Litejob with slot dedupe + optional Honker leadership.
   Docs: `docs/RECURRING.md`, sample `samples/recurring.yml`, generator template.
-- **Docs (1.1.0 install)**: README + `docs/RELEASE_GITHUB_PACKAGES.md` cover
-  Packages-only install, visibility/`read:packages` permissions, and CI secret
-  `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` (no PAT rotation required in-repo).
-- **CI**: `HonkerStatus` resets Litejobqueue singleton before live probe;
-  Rails 8.1 integration asserts dynamic `Litestack::VERSION`.
 - **Honker full-stack bench**: `bench/bench_honker_stack.rb` /
-  `rake bench:honker_stack` multi-process job (poll vs honker), LiteCache L1 +
-  invalidate, LiteCable latency; guide `docs/HONKER_FULL_STACK_BENCH.md`.
+  `rake bench:honker_stack`; guide `docs/HONKER_FULL_STACK_BENCH.md`.
+
+### Fixed
+
+- **LiteJob Honker enqueue notify**: filtered wakeup hubs receive `litequeue:*`
+  notify on claim-backend push (no more ~1s fallback stall).
+- **Honker claim sweep**: interruptible sleep so `close` does not block ~1s.
+- **Recurring ticker**: only spawned when schedules are configured (worker-handle counts).
+- **HonkerStatus** live probe resets Litejobqueue singleton (CI pollution).
+
+### Changed
+
+- **CI simplified**: Ruby **4.0.5** and **4.0.6** + Rails **8.1.3** only
+  (plus Honker soak/bench on 4.0.5).
+- **Docs**: Packages install / visibility / CI secret
+  (`docs/RELEASE_GITHUB_PACKAGES.md`, README 1.1).
 
 ## [1.1.0] - 2026-07-22
 

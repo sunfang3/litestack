@@ -30,7 +30,7 @@ source "https://rubygems.org"
 gem "rails", "~> 8.1"
 
 source "https://rubygems.pkg.github.com/sunfang3" do
-  gem "litestack", "1.1.0"
+  gem "litestack", "1.1.1"
   # Optional — multi-worker wake / L1 invalidate / job lifecycle stream
   gem "honker", "0.4.0"
 end

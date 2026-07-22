@@ -7,10 +7,10 @@ RubyGems.org.
 |------|--------|
 | Host | `https://rubygems.pkg.github.com/sunfang3` |
 | Package name | `litestack` |
-| Current version | **1.1.0** |
+| Current version | **1.1.1** |
 | Package page | https://github.com/users/sunfang3/packages/rubygems/package/litestack |
 | Repo | https://github.com/sunfang3/litestack |
-| Tag | `v1.1.0` |
+| Tag | `v1.1.1` |
 
 Related: [HONKER.md](HONKER.md) (optional peer) · [HONKER_FULL_STACK_BENCH.md](HONKER_FULL_STACK_BENCH.md).
 
@@ -24,7 +24,7 @@ Related: [HONKER.md](HONKER.md) (optional peer) · [HONKER_FULL_STACK_BENCH.md](
 source "https://rubygems.org"
 
 source "https://rubygems.pkg.github.com/sunfang3" do
-  gem "litestack", "1.1.0"
+  gem "litestack", "1.1.1"
   gem "honker", "0.4.0"   # optional — multi-worker wake / L1 / claim / lifecycle
 end
 ```
@@ -109,7 +109,7 @@ Classic PATs remain the most reliable for Bundler’s `user:token` form.
 |---------|-----|
 | `Authentication is required for rubygems.pkg.github.com` | Set `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` or `bundle config` |
 | `Bad username or password` | Wrong PAT; missing `read:packages`; expired token |
-| `Could not find gem 'litestack (= 1.1.0)'` | Auth OK but no package read access, or wrong owner source |
+| `Could not find gem 'litestack (= 1.1.1)'` | Auth OK but no package read access, or wrong owner source |
 | Resolves old 0.x / wrong gem | Gemfile is still pulling from rubygems.org — use the `source` block above |
 
 ---
@@ -175,13 +175,18 @@ git push origin master --tags
 
 ---
 
-## 5. 1.1.0 release notes (summary)
+## 5. Recent release notes
 
-Shipped on Packages as **litestack 1.1.0** (tag `v1.1.0`):
+### 1.1.1 (tag `v1.1.1`)
 
-- Optional **Honker** integration: LiteJob wakeup + claim/ack + heartbeat, LiteCable transport, LiteCache L1 + invalidate, lifecycle stream, outbox `table_prefix`
-- `rake litestack:honker:status`, `rake soak:honker`, `rake bench:honker_stack`
-- `rake examples:honker_rails` demo app
-- Docs: `docs/HONKER.md`, `docs/HONKER_FULL_STACK_BENCH.md`
+- Recurring/cron schedules (issue #101)
+- CI: Ruby 4.0.5/4.0.6 + Rails 8.1.3 only
+- Honker enqueue notify + interruptible sweep (job wake latency)
+- Full-stack bench + install/permissions docs
 
-Full list: [CHANGELOG.md](../CHANGELOG.md) section `[1.1.0]`.
+### 1.1.0 (tag `v1.1.0`)
+
+- Optional **Honker** integration (wake / claim / L1 / cable / lifecycle / outbox)
+- `rake litestack:honker:status`, soak, examples app
+
+Full list: [CHANGELOG.md](../CHANGELOG.md).
