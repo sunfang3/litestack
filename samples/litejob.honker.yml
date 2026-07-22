@@ -1,0 +1,36 @@
+# Example LiteJob configuration with Honker-backed wakeup (and optional
+# claim/ack backend). Requires the honker gem and a file-backed queue path.
+#
+#   # Gemfile
+#   gem "honker"
+#
+# Place as config/litejob.yml (or point config_path at this file).
+
+development:
+  path: storage/development/queue.sqlite3
+  workers: 2
+  queues:
+    - [default, 1]
+  # PR1: replace empty-queue sleep backoff with shared Honker watcher
+  wakeup: honker
+  watcher_poll_interval_ms: 5
+  fallback_interval: 5
+  # PR2: only wake workers on enqueue/repush notifications (not pop/GC)
+  # wakeup_filter_notifications: true
+  # queue_notify: true
+
+production:
+  path: storage/production/queue.sqlite3
+  workers: 5
+  queues:
+    - [default, 1]
+    - [urgent, 10]
+  wakeup: honker
+  watcher_poll_interval_ms: 5
+  fallback_interval: 5
+  wakeup_filter_notifications: true
+  queue_notify: true
+  # PR4: at-least-once claim/ack (visibility timeout reclaim after crash)
+  # backend: honker
+  # visibility_timeout: 300
+  # heartbeat_interval: 60

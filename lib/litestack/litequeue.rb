@@ -1,7 +1,8 @@
-# frozen_stringe_literal: true
+# frozen_string_literal: true
 
 # all components should require the support module
 require_relative "litesupport"
+require_relative "wakeup"
 
 # require 'securerandom'
 
@@ -24,7 +25,10 @@ class Litequeue
   DEFAULT_OPTIONS = {
     path: -> { Litesupport.root.join("queue.sqlite3") },
     mmap_size: 32 * 1024,
-    sync: 0
+    sync: 0,
+    # When true (and honker is loadable), push/repush emit notify() in the same
+    # transaction so filtered wakeup backends can ignore pop/GC commits.
+    queue_notify: false
   }
 
   # create a new instance of the litequeue object
@@ -48,11 +52,27 @@ class Litequeue
     # a race condition if a thread hits the busy handler
     # before the current thread proceeds after a backoff
     # id = SecureRandom.uuid # this is somehow expensive, can we improve?
-    run_stmt(:push, queue, delay, value)[0]
+    if queue_notify?
+      transaction do
+        result = run_stmt(:push, queue, delay, value)[0]
+        emit_queue_notify(queue, result, delay)
+        result
+      end
+    else
+      run_stmt(:push, queue, delay, value)[0]
+    end
   end
 
   def repush(id, value, delay = 0, queue = "default")
-    run_stmt(:repush, id, queue, delay, value)[0]
+    if queue_notify?
+      transaction do
+        result = run_stmt(:repush, id, queue, delay, value)[0]
+        emit_queue_notify(queue, [id, queue], delay)
+        result
+      end
+    else
+      run_stmt(:repush, id, queue, delay, value)[0]
+    end
   end
 
   alias_method :<<, :push
@@ -83,6 +103,25 @@ class Litequeue
   # returns a count of entries in all queues, or if a queue name is given, returns the count of entries in that queue
   def count(queue = nil)
     run_sql("SELECT count(*) FROM queue WHERE iif(?1 IS NOT NULL, name = ?1, TRUE)", queue)[0][0]
+  end
+
+  # Earliest fire_at still in the future for the given queue name(s).
+  # +queue_names+ may be a String or Array of Strings. Returns Float or nil.
+  def next_fire_at(queue_names = nil)
+    names = Array(queue_names).compact.map(&:to_s)
+    if names.empty?
+      row = run_stmt(:next_fire_at, nil)
+      val = row&.dig(0, 0)
+      return val&.to_f
+    end
+    if names.length == 1
+      row = run_stmt(:next_fire_at, names[0])
+      val = row&.dig(0, 0)
+      return val&.to_f
+    end
+    placeholders = (["?"] * names.length).join(", ")
+    sql = "SELECT min(fire_at) FROM queue WHERE name IN (#{placeholders}) AND fire_at > unixepoch('subsec')"
+    run_sql(sql, *names)[0][0]&.to_f
   end
 
   # return the size of the queue file on disk
@@ -117,6 +156,30 @@ class Litequeue
   end
 
   private
+
+  def queue_notify?
+    return false unless @options[:queue_notify]
+    return @queue_notify_ready if defined?(@queue_notify_ready) && !@queue_notify_ready.nil?
+
+    @queue_notify_ready = honker_notify_available?
+  end
+
+  def honker_notify_available?
+    return false unless Litestack::Wakeup::Honker.watchable_path?(@options[:path])
+
+    Litestack::Wakeup::Honker.load_honker_gem!
+  end
+
+  def emit_queue_notify(queue, result, delay)
+    return unless @honker_extension_loaded
+
+    channel = "litequeue:#{queue}"
+    id = result.is_a?(Array) ? result[0] : result
+    payload = Oj.dump({id: id, delay: delay.to_f, queue: queue.to_s}, mode: :strict)
+    run_sql("SELECT notify(?, ?)", channel, payload)
+  rescue SQLite3::Exception => e
+    @logger&.warn { "[litequeue] notify failed: #{e.message}" }
+  end
 
   def prepare_search_options(opts)
     sql_opts = {}
@@ -155,6 +218,24 @@ class Litequeue
           conn.execute("DROP TABLE _ul_queue_")
         end
       end
+      maybe_load_honker_extension(conn)
     end
+  end
+
+  def maybe_load_honker_extension(conn)
+    return unless @options[:queue_notify] || honker_backend_requested?
+
+    return unless honker_notify_available?
+
+    ::Honker.setup(conn, extension_path: @options[:honker_extension_path])
+    @honker_extension_loaded = true
+  rescue => e
+    @honker_extension_loaded = false
+    @logger&.warn { "[litequeue] could not load honker extension: #{e.message}" }
+  end
+
+  def honker_backend_requested?
+    b = @options[:backend] || @options[:job_backend]
+    b && b.to_sym == :honker
   end
 end

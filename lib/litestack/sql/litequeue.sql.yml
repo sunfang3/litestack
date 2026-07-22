@@ -84,3 +84,11 @@ stmts:
     FROM queue
     GROUP BY name
     ORDER BY count DESC;
+
+  # Earliest delayed (not yet fireable) job for a single queue.
+  # Used by deadline-aware worker wait so delayed jobs wake without busy-poll.
+  next_fire_at: >
+    SELECT min(fire_at)
+    FROM queue
+    WHERE name = ifnull($1, name)
+      AND fire_at > unixepoch('subsec');

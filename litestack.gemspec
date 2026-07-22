@@ -40,6 +40,10 @@ Gem::Specification.new do |spec|
   spec.add_dependency "base64", ">= 0.2"
   spec.add_dependency "bigdecimal", ">= 3.1"
 
+  # honker is an *optional* soft dependency (wakeup / litecable transport /
+  # reliable job backend). Not listed as runtime dep so existing installs stay
+  # lean; add `gem "honker"` when enabling those adapters.
+
   # Development dependencies — Rails version is controlled by Gemfile / appraisal gemfiles.
   spec.add_development_dependency "rake", "~> 13"
   spec.add_development_dependency "minitest", "~> 5"

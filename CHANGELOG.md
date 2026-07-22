@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+### Added — Honker integration (optional)
+
+LiteJob and LiteCable can use the optional [`honker`](https://github.com/russellromney/honker) gem as a wake/coordination layer. Honker is **not** a hard dependency; without it, polling backends remain the default.
+
+- **LiteJob wakeup** (`wakeup: :polling | :honker`): per-process shared wake signal with deadline-aware wait for delayed jobs. Honker watcher replaces multi-worker empty-queue SQL polling.
+- **Queue notifications** (`queue_notify: true`, `wakeup_filter_notifications: true`): transactional `notify()` on push/repush so workers ignore pop/GC commits.
+- **LiteJob backend** (`backend: :litequeue | :honker`): optional claim/ack/visibility-timeout backend for at-least-once execution after process crash.
+- **LiteCable transport** (`transport: :polling | :honker`): cross-process broadcast via Honker notifications instead of 50ms message-table polling.
+- Sample configs: `samples/litejob.honker.yml`, `samples/litecable.honker.yml`.
+- Design notes: `docs/Integration_with_Honker.md`.
+
 ## [1.0.0] - 2026-07-17
 
 - **Breaking:** Require Ruby `>= 4.0`; drop Ruby 3.x support.

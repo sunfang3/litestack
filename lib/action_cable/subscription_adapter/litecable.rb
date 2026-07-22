@@ -23,11 +23,19 @@ module ActionCable
         else
           "./config/litecable.yml"
         end
-        path = if server.respond_to?(:config) && server.config.respond_to?(:cable)
-          server.config.cable&.dig("path")
+        cable_cfg = if server.respond_to?(:config) && server.config.respond_to?(:cable)
+          server.config.cable
         end
+        path = cable_cfg&.dig("path")
         opts = {config_path: config_path, logger: @logger}
         opts[:path] = path if path
+        # Optional Honker transport: transport: honker in cable.yml / litecable.yml
+        if (transport = cable_cfg&.dig("transport") || cable_cfg&.dig(:transport))
+          opts[:transport] = transport
+        end
+        if (poll_ms = cable_cfg&.dig("watcher_poll_interval_ms") || cable_cfg&.dig(:watcher_poll_interval_ms))
+          opts[:watcher_poll_interval_ms] = poll_ms
+        end
         super(opts)
       end
 

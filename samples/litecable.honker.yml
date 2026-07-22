@@ -1,0 +1,25 @@
+# Example LiteCable configuration with Honker notify/listen transport.
+# Requires the honker gem and a file-backed cable database path.
+#
+#   # Gemfile
+#   gem "honker"
+#
+#   # config/cable.yml
+#   production:
+#     adapter: litecable
+#     transport: honker
+#     path: storage/production/cable.sqlite3
+#
+# Or config/litecable.yml:
+
+development:
+  path: storage/development/cable.sqlite3
+  transport: honker
+  watcher_poll_interval_ms: 5
+  expire_after: 5
+
+production:
+  path: storage/production/cable.sqlite3
+  transport: honker
+  watcher_poll_interval_ms: 5
+  expire_after: 5

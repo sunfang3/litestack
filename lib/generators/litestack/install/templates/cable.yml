@@ -1,8 +1,14 @@
 development:
   adapter: litecable
+  # Optional: cross-process notify via honker (gem "honker" required, file-backed path)
+  # transport: honker
+  # path: storage/development/cable.sqlite3
 
 test:
   adapter: test
 
 production:
   adapter: litecable
+  # transport: honker
+  # path: storage/production/cable.sqlite3
+
