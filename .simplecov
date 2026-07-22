@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Central coverage configuration. Started from test/helper.rb before project requires.
+# Central coverage configuration. Loaded when SimpleCov is required (see test/helper.rb).
 SimpleCov.start do
   enable_coverage :branch
   add_filter "/test/"
@@ -10,8 +10,10 @@ SimpleCov.start do
   add_filter "/vendor/"
 
   # Measured baseline: line ~86% / branch ~58% on full suite (Ruby 4 + Rails 8.1).
-  # Keep line floor at 80%; suite must clear it without optional native binaries.
-  minimum_coverage line: 80, branch: 50
+  # Floors apply to full suite only (skip on partial/target runs).
+  unless ENV["COVERAGE_PARTIAL"] == "1" || ENV["LITESTACK_PARTIAL_TEST"] == "1"
+    minimum_coverage line: 80, branch: 50
+  end
 
   add_group "Core", "lib/litestack"
   add_group "Rails", %w[

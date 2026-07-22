@@ -13,8 +13,15 @@ Lower-bound CI also runs Ruby 4.0.0 + Rails 8.1.0 (`gemfiles/rails81_min.gemfile
 
 ```bash
 ruby -v   # expect 4.0.x
+
+# Honker (dev dependency) is on GitHub Packages, not rubygems.org:
+export BUNDLE_RUBYGEMS__PKG__GITHUB__COM="YOUR_GH_USERNAME:YOUR_PAT"  # read:packages
+# or: bundle config set --local rubygems.pkg.github.com "user:PAT"
+
 bundle install
 ```
+
+See [docs/HONKER.md](docs/HONKER.md) for Packages auth and optional features.
 
 ## Issue fix workflow (`issue-fixes`)
 
@@ -47,6 +54,9 @@ For each issue:
 
 ```bash
 bundle exec rake test          # unit/integration contracts (preloads coverage)
+bundle exec rake test:honker   # Honker-related subset
+bundle exec rake soak:honker   # multi-process finite soak
+bundle exec rake bench:litecache_l1  # L1 baseline + compare gate
 bundle exec rake standard      # Ruby 4 Standard
 bundle exec rake verify        # test + standard + package
 ```

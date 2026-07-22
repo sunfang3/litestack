@@ -5,6 +5,7 @@
 #   3) latest Ruby 4.x + latest Rails 8.x
 #   4) Ruby 4.0.0 + latest Rails 8.x     (cross-corner)
 #   5) latest Ruby 4.x + Rails 8.1.0     (cross-corner)
+# Plus: Honker soak + LiteCache bench (needs Packages credentials)
 # Non-blocking: Ruby head / Rails main (continue-on-error)
 
 name: Tests
@@ -15,8 +16,16 @@ on:
   pull_request:
     branches: ["master"]
 
+# packages:read — resolve honker from rubygems.pkg.github.com/sunfang3 when
+# using GITHUB_TOKEN; prefer repo secret BUNDLE_RUBYGEMS__PKG__GITHUB__COM
+# (format: "username:PAT" with read:packages) for private/fork packages.
 permissions:
   contents: read
+  packages: read
+
+env:
+  # Prefer explicit Packages secret; fall back to GITHUB_TOKEN for same-owner packages.
+  BUNDLE_RUBYGEMS__PKG__GITHUB__COM: ${{ secrets.BUNDLE_RUBYGEMS__PKG__GITHUB__COM || format('{0}:{1}', github.actor, secrets.GITHUB_TOKEN) }}
 
 jobs:
   lower-bound:
@@ -50,10 +59,13 @@ jobs:
         run: |
           ruby -v
           bundle exec ruby -e 'require "rails"; require "sqlite3"; puts "Rails=#{Rails.version} sqlite3=#{SQLite3::VERSION}"'
+          bundle exec ruby -e 'require "honker"; puts "honker=#{Honker::VERSION}"'
       - name: Fetch optional SQLite extensions
         run: bundle exec rake extensions:fetch
       - name: Test
         run: bundle exec rake test
+      - name: Honker-focused tests
+        run: bundle exec rake test:honker
       - name: Standard
         run: bundle exec rake standard
       - name: Package verify
@@ -112,6 +124,28 @@ jobs:
         run: bundle exec rake extensions:fetch
       - name: Resolve and test
         run: bundle exec rake test
+
+  honker-soak:
+    name: Honker soak + LiteCache bench
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0.5"
+          bundler-cache: true
+      - name: Honker version
+        run: bundle exec ruby -e 'require "honker"; puts "honker=#{Honker::VERSION}"'
+      - name: Multi-process soak
+        run: bundle exec rake soak:honker
+        env:
+          LITESTACK_SOAK_DURATION: "12"
+          LITESTACK_SOAK_JOBS: "24"
+          LITESTACK_SOAK_CACHE_KEYS: "12"
+      - name: LiteCache L1 baseline + compare
+        run: bundle exec rake bench:litecache_l1
+        env:
+          LITESTACK_BENCH_ITERS: "800"
 
   head-warning:
     name: Ruby head / Rails main (non-blocking)

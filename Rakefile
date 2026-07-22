@@ -20,6 +20,37 @@ namespace :test do
     t.test_files = FileList["test/test_*.rb"]
     t.warning = false
   end
+
+  # Subset of the suite — skip SimpleCov full-suite floors (see .simplecov).
+  # ENV is inherited by the Rake::TestTask child ruby process.
+  task :honker_env do
+    ENV["COVERAGE_PARTIAL"] = "1"
+  end
+
+  desc "Honker-related unit/integration tests (requires gem honker)"
+  Rake::TestTask.new(honker: "test:honker_env") do |t|
+    t.libs << "test"
+    t.libs << "lib"
+    t.ruby_opts << "-r./test/helper"
+    t.test_files = FileList[
+      "test/test_wakeup.rb",
+      "test/test_litejob_honker_backend.rb",
+      "test/test_litecable_honker.rb",
+      "test/test_litecache_invalidate.rb",
+      "test/test_litejob_outbox.rb",
+      "test/test_litejob_results_lifecycle.rb",
+      "test/test_liteboard_lifecycle.rb",
+      "test/test_sql_table_prefix.rb"
+    ]
+    t.warning = false
+  end
+end
+
+namespace :soak do
+  desc "Finite multi-process Honker soak (LiteJob claim + LiteCache L1 drop)"
+  task :honker do
+    sh "bundle exec ruby scripts/soak_honker.rb"
+  end
 end
 
 namespace :integration do
@@ -91,6 +122,17 @@ namespace :bench do
   desc "Finite benchmark smoke (non-blocking)"
   task :smoke do
     puts "bench:smoke — run manually from bench/ after deps resolve (see BENCHMARKS.md)"
+  end
+
+  desc "LiteCache L1 baseline + compare gate (machine-local IPS)"
+  task :litecache_l1 do
+    sh "bundle exec ruby bench/bench_litecache_l1.rb baseline"
+    sh "bundle exec ruby bench/bench_litecache_l1.rb compare"
+  end
+
+  desc "LiteCache L1 local + invalidate latency (needs honker)"
+  task :litecache_l1_full do
+    sh "bundle exec ruby bench/bench_litecache_l1.rb all"
   end
 end
 

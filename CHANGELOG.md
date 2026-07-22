@@ -50,6 +50,9 @@ LiteJob and LiteCable can use the optional [`honker`](https://github.com/russell
 - **Honker long-job heartbeat**: while `perform` runs under `backend: :honker`,
   periodically `heartbeat` the claim (`heartbeat_interval`, `heartbeat_extend`)
   so jobs longer than `visibility_timeout` are not reclaimed mid-run.
+- **CI + soak**: workflow authenticates to GitHub Packages for `honker`;
+  `rake test:honker`, `rake soak:honker` (`scripts/soak_honker.rb`), and
+  `rake bench:litecache_l1` (baseline + compare) on exact-target / soak jobs.
 
 ## [1.0.0] - 2026-07-17
 

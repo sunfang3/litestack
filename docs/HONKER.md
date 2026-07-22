@@ -28,7 +28,11 @@ export BUNDLE_RUBYGEMS__PKG__GITHUB__COM="YOUR_GH_USERNAME:YOUR_PAT"
 bundle config set --local rubygems.pkg.github.com "YOUR_GH_USERNAME:YOUR_PAT"
 ```
 
-CI: set the same value as a secret env var on the job.
+CI: store the same `username:PAT` string as repository secret
+`BUNDLE_RUBYGEMS__PKG__GITHUB__COM` (Actions workflow injects it into
+`env` for every job). Workflow also requests `packages: read` so
+`GITHUB_TOKEN` can be used as a fallback for packages owned by the same
+account when the dedicated secret is absent.
 
 ### 2. Gemfile
 
@@ -133,14 +137,24 @@ LITEBOARD_QUEUE_PATH=storage/production/queue.sqlite3 bin/liteboard
 
 ---
 
-## Regression / perf gates (LiteCache)
+## CI / soak / benches
 
 ```bash
-bundle exec ruby bench/bench_litecache_l1.rb baseline
-bundle exec ruby bench/bench_litecache_l1.rb compare    # exit 2 if IPS < 95%
-bundle exec ruby bench/bench_litecache_l1.rb l1_local
-bundle exec ruby bench/bench_litecache_l1.rb invalidate # L1 drop p50/p99
+# Honker-focused tests
+bundle exec rake test:honker
+
+# Finite multi-process soak (LiteJob claim + LiteCache L1 drop)
+bundle exec rake soak:honker
+# or: bundle exec ruby scripts/soak_honker.rb --duration 15 --jobs 30
+
+# LiteCache IPS gate (machine-local baseline + 95% floor)
+bundle exec rake bench:litecache_l1
+# full: baseline + l1_local + invalidate
+bundle exec rake bench:litecache_l1_full
 ```
+
+GitHub Actions job **Honker soak + LiteCache bench** runs on every push/PR to
+`master` when Packages auth resolves.
 
 ---
 
