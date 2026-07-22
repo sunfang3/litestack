@@ -13,8 +13,9 @@ LiteCache L1: [plans/litecache-l1-honker-design-review.md](plans/litecache-l1-ho
 
 ## Install in a Rails (or plain Ruby) app
 
-Honker **0.4.0** for this fork is published on **GitHub Packages** (`sunfang3`),
-not RubyGems.org.
+This fork’s **litestack** gem (1.1.0+) and **Honker 0.4.0** are both published on
+**GitHub Packages** (`sunfang3`), not RubyGems.org. Release notes:
+[RELEASE_GITHUB_PACKAGES.md](RELEASE_GITHUB_PACKAGES.md).
 
 ### 1. Authenticate Bundler to GitHub Packages
 
@@ -40,11 +41,9 @@ account when the dedicated secret is absent.
 # Gemfile
 source "https://rubygems.org"
 
-gem "litestack"
-# …
-
 source "https://rubygems.pkg.github.com/sunfang3" do
-  gem "honker", "0.4.0"
+  gem "litestack", "1.1.0"
+  gem "honker", "0.4.0"   # optional — enable for wakeup / L1 / cable / lifecycle
 end
 ```
 
@@ -52,8 +51,8 @@ end
 bundle install
 ```
 
-Litestack itself does **not** hard-depend on Honker at gem install time; apps that
-want the optional features add the block above.
+Litestack does **not** hard-depend on Honker at gem install time; apps that want
+the optional features add the `honker` line above.
 
 ---
 

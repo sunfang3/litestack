@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-22
+
+Published to **GitHub Packages** (`rubygems.pkg.github.com/sunfang3`), not RubyGems.org.
+See [docs/RELEASE_GITHUB_PACKAGES.md](docs/RELEASE_GITHUB_PACKAGES.md).
+
 ### Added — Honker integration (optional)
 
 LiteJob and LiteCable can use the optional [`honker`](https://github.com/russellromney/honker) gem as a wake/coordination layer. Honker is **not** a hard dependency; without it, polling backends remain the default.

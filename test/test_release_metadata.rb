@@ -4,8 +4,8 @@ require_relative "helper"
 require "rubygems"
 
 class TestReleaseMetadata < Minitest::Test
-  def test_version_is_1_0_0
-    assert_equal "1.0.0", Litestack::VERSION
+  def test_version_is_1_1_0
+    assert_equal "1.1.0", Litestack::VERSION
   end
 
   def test_gemspec_ruby_and_no_rails_runtime
@@ -18,8 +18,14 @@ class TestReleaseMetadata < Minitest::Test
     refute_includes runtime, "activerecord"
   end
 
-  def test_changelog_has_1_0_0_section
+  def test_gemspec_push_host_is_github_packages
+    spec = Gem::Specification.load(File.expand_path("../litestack.gemspec", __dir__))
+    assert_equal "https://rubygems.pkg.github.com/sunfang3", spec.metadata["allowed_push_host"]
+  end
+
+  def test_changelog_has_1_1_0_section
     changelog = File.read(File.expand_path("../CHANGELOG.md", __dir__))
+    assert_match(/\[1\.1\.0\]/, changelog)
     assert_match(/\[1\.0\.0\]/, changelog)
   end
 

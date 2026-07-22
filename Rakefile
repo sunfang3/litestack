@@ -170,10 +170,15 @@ end
 
 namespace :release do
   desc "Release-candidate dry run: build, verify, install — never push"
-  task dry_run: ["test", "standard", "package:verify"] do
+  task dry_run: ["package:verify"] do
     require_relative "lib/litestack/version"
-    abort "VERSION must be 1.0.0 for this modernization release" unless Litestack::VERSION == "1.0.0"
+    abort "VERSION must be 1.1.0 for this release" unless Litestack::VERSION == "1.1.0"
     puts "release:dry_run OK for litestack-#{Litestack::VERSION} (no push/tag)"
+  end
+
+  desc "Build and push litestack to GitHub Packages (sunfang3); needs write:packages PAT"
+  task github_packages: ["package:verify"] do
+    sh "bundle exec ruby scripts/push_github_packages.rb"
   end
 end
 

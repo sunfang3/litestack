@@ -61,7 +61,11 @@ bundle exec rake soak:honker   # multi-process finite soak
 bundle exec rake bench:litecache_l1  # L1 baseline + compare gate
 bundle exec rake standard      # Ruby 4 Standard
 bundle exec rake verify        # test + standard + package
+bundle exec rake package:verify
+bundle exec rake release:github_packages  # push to Packages (write:packages PAT)
 ```
+
+Release host: GitHub Packages `sunfang3` — [docs/RELEASE_GITHUB_PACKAGES.md](docs/RELEASE_GITHUB_PACKAGES.md).
 
 Coverage starts in `test/helper.rb` before project code loads. Aggregate floors live in that helper / `.simplecov`. New compatibility code targets 100% line/branch coverage.
 

@@ -9,15 +9,19 @@ Gem::Specification.new do |spec|
   spec.email = ["oldmoe@gmail.com"]
 
   spec.summary = "A SQLite based, lightning fast, super efficient and dead simple to setup and use database, cache and job queue for Ruby and Rails applications!"
-  spec.homepage = "https://github.com/oldmoe/litestack"
+  # Published fork host (GitHub Packages: sunfang3). Upstream: oldmoe/litestack.
+  spec.homepage = "https://github.com/sunfang3/litestack"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 4.0"
 
-  spec.metadata["allowed_push_host"] = "https://rubygems.org"
+  # This fork ships to GitHub Packages only (not rubygems.org).
+  spec.metadata["allowed_push_host"] = "https://rubygems.pkg.github.com/sunfang3"
   spec.metadata["homepage_uri"] = spec.homepage
-  spec.metadata["source_code_uri"] = spec.homepage
-  spec.metadata["changelog_uri"] = "https://github.com/oldmoe/litestack/blob/master/CHANGELOG.md"
-  spec.metadata["rubygems_mfa_required"] = "true"
+  spec.metadata["source_code_uri"] = "https://github.com/sunfang3/litestack"
+  spec.metadata["changelog_uri"] = "https://github.com/sunfang3/litestack/blob/master/CHANGELOG.md"
+  spec.metadata["github_repo"] = "ssh://github.com/sunfang3/litestack"
+  # MFA not enforced on GitHub Packages the same way as rubygems.org
+  # spec.metadata["rubygems_mfa_required"] = "true"
 
   # Runtime, license/readme/changelog, and intentional executables only.
   # Prefer filesystem inventory so newly added modernization files package correctly
