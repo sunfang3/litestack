@@ -1,26 +1,47 @@
 # frozen_string_literal: true
 
-require_relative "../../litestack/compatibility"
-Litestack::Compatibility.assert_rails_supported!
-
 require "active_support"
 require "active_support/core_ext/numeric/time"
 require "active_support/cache"
+
+require_relative "../../litestack/compatibility"
+Litestack::Compatibility.assert_rails_supported!
 
 require_relative "../../litestack/litecache"
 
 module ActiveSupport
   module Cache
+    # Rails cache store backed by SQLite (::Litecache).
+    #
+    #   config.cache_store = :litecache
+    #   config.cache_store = :litecache, {
+    #     path: Rails.root.join("storage", Rails.env, "cache.sqlite3").to_s,
+    #     l1: true,
+    #     invalidate: :honker, # multi-worker: needs gem "honker"
+    #   }
+    #
+    # L1 / invalidate options are documented in
+    # docs/plans/litecache-l1-honker-design-review.md and samples/litecache.honker.yml.
     class Litecache < Store
+      # Options forwarded to ::Litecache (everything else stays on the AS Store).
+      LITECACHE_OPTION_KEYS = %i[
+        path config_path sync expiry size mmap_size min_size
+        return_full_record sleep_interval metrics logger
+        l1 l1_max_entries l1_max_value_bytes l1_ttl l1_ttl_default
+        invalidate notify_ops notify_channel watcher_poll_interval_ms
+        honker_extension_path shutdown_timeout
+      ].freeze
+
       def self.supports_cache_versioning?
         true
       end
 
       def initialize(options = {})
-        super
+        options = options ? options.dup : {}
+        super(options)
         @options[:return_full_record] = true
         # Do NOT mutate ActiveSupport::Cache.format_version — use the host app's coder.
-        @cache = ::Litecache.new(@options)
+        @cache = ::Litecache.new(litecache_options)
       end
 
       def increment(key, amount = 1, options = nil)
@@ -70,11 +91,39 @@ module ActiveSupport
         @cache.stats
       end
 
+      def l1_stats
+        @cache.l1_stats
+      end
+
+      def l1_enabled?
+        @cache.l1_enabled?
+      end
+
+      def invalidate_mode
+        @cache.invalidate_mode
+      end
+
       def close
         @cache.close
       end
 
       private
+
+      def litecache_options
+        opts = {}
+        LITECACHE_OPTION_KEYS.each do |key|
+          opts[key] = @options[key] if @options.key?(key)
+          sk = key.to_s
+          opts[key] = @options[sk] if @options.key?(sk) && !opts.key?(key)
+        end
+        opts[:return_full_record] = true
+        # Prefer app config/litecache.yml when present and not overridden
+        if !opts.key?(:config_path) && defined?(Rails) && Rails.respond_to?(:root) && Rails.root
+          yml = Rails.root.join("config/litecache.yml")
+          opts[:config_path] = yml.to_s if yml.exist?
+        end
+        opts
+      end
 
       # Read an entry from the cache.
       def read_entry(key, **options)

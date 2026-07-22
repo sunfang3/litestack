@@ -293,6 +293,11 @@ class Litecache
     }
   end
 
+  # Used by ActiveSupport::Cache::Litecache#stats and Liteboard-style tooling.
+  def stats
+    snapshot
+  end
+
   def l1_enabled?
     !!@l1
   end

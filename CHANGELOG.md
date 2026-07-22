@@ -32,6 +32,10 @@ LiteJob and LiteCable can use the optional [`honker`](https://github.com/russell
   - `invalidate: :honker` — same-file transactional `notify` + listener drops
     peer L1 (`notify_ops`, `notify_channel`); falls back to `:ttl` if Honker
     is unavailable. Soft TTL remains a lost-notify backstop.
+- **LiteCache Rails Step 5**: ActiveSupport store forwards L1/invalidate options;
+  install generator adds `config/litecache.yml` and production `cache_store`
+  path under `storage/`; docs + `samples/litecache.honker.yml`. Defaults remain
+  L1 off.
 
 ## [1.0.0] - 2026-07-17
 

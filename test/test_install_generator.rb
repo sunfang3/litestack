@@ -64,7 +64,10 @@ class TestInstallGenerator < Minitest::Test
     assert_match(/adapter:\s*litedb/, db)
     assert_match(/adapter:\s*litecable/, cable)
     assert_match(/cache_store = :litecache/, prod)
+    assert_match(/storage.*cache\.sqlite3/, prod)
     assert_match(/queue_adapter = :litejob/, prod)
+    assert File.file?(File.join(@root, "config/litecache.yml")), "expected config/litecache.yml"
+    assert_match(/invalidate/, File.read(File.join(@root, "config/litecache.yml")))
     assert_match(/sqlite3/, git)
     # issue #119: same SQLite exclusions in .dockerignore
     assert_match(%r{/db/\*\*/\*\.sqlite3}, docker)

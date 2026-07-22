@@ -1,0 +1,33 @@
+# Litecache configuration (optional).
+# Loaded when config_path points here (Rails AS store sets this automatically
+# if config/litecache.yml exists).
+#
+# Defaults keep L1 off for zero write-amplification surprise. Multi-Puma-worker
+# apps that install gem "honker" can enable L1 + cross-process invalidate.
+#
+# See docs/RAILS_FULL_STACK.md and samples/litecache.honker.yml
+
+development:
+  # path is usually set from config.cache_store options in application.rb /
+  # environments/*.rb — leave path out of YAML unless you want a fixed file.
+  sleep_interval: 30
+  # l1: false
+  # invalidate: none
+
+test:
+  sleep_interval: 60
+
+production:
+  sleep_interval: 30
+  # Recommended for multi-worker (requires gem "honker"):
+  # l1: true
+  # invalidate: honker
+  # l1_max_entries: 10000
+  # l1_ttl_default: 5
+  # notify_ops: [set, delete, clear]
+  # watcher_poll_interval_ms: 5
+  #
+  # Soft TTL only (no Honker):
+  # l1: true
+  # invalidate: ttl
+  # l1_ttl: 5

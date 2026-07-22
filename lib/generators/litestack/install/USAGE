@@ -4,7 +4,8 @@ Description:
     Configures (core stack — no native .so required):
       - config/database.yml → adapter: litedb (preserves multi-database entries when possible)
       - config/cable.yml → adapter: litecable
-      - production cache_store → :litecache
+      - production cache_store → :litecache (+ path under storage/)
+      - config/litecache.yml → optional L1 / invalidate notes
       - production active_job.queue_adapter → :litejob
       - .gitignore → SQLite database files under db/
       - .dockerignore → same SQLite exclusions when the file exists (Rails 7.1+ default)

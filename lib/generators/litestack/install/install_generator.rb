@@ -48,6 +48,15 @@ class Litestack::InstallGenerator < Rails::Generators::Base
     end
   end
 
+  def create_litecache_config
+    dest = File.join(destination_root, "config/litecache.yml")
+    if File.exist?(dest)
+      say_status :skip, "config/litecache.yml already exists", :yellow
+    else
+      template "litecache.yml", "config/litecache.yml"
+    end
+  end
+
   def modify_cache_store_adapter
     production = File.join(destination_root, "config/environments/production.rb")
     return unless File.exist?(production)
@@ -58,19 +67,30 @@ class Litestack::InstallGenerator < Rails::Generators::Base
       return
     end
 
+    snippet = cache_store_snippet
     if content.match?(/#\s*config\.cache_store\s*=\s*:mem_cache_store/)
       gsub_file "config/environments/production.rb",
         /#\s*config\.cache_store\s*=\s*:mem_cache_store/,
-        "config.cache_store = :litecache"
+        snippet
     elsif content.match?(/config\.cache_store\s*=/)
       gsub_file "config/environments/production.rb",
         /config\.cache_store\s*=.*/,
-        "config.cache_store = :litecache"
+        snippet
     else
       inject_into_file "config/environments/production.rb",
-        "\n  config.cache_store = :litecache\n",
+        "\n  #{snippet}\n",
         before: /^end\s*\z/
     end
+  end
+
+  def cache_store_snippet
+    <<~RUBY.chomp
+      config.cache_store = :litecache, {
+          path: Rails.root.join("storage", Rails.env, "cache.sqlite3").to_s
+          # Multi-Puma-worker: gem "honker" then set l1: true, invalidate: :honker
+          # (or invalidate: :ttl). See config/litecache.yml and samples/litecache.honker.yml
+        }
+    RUBY
   end
 
   def modify_active_job_adapter

@@ -23,11 +23,35 @@
 | 能力 | 组件 | 配置位置 |
 |------|------|----------|
 | 主库 | Litedb | `config/database.yml` → `adapter: litedb` |
-| 缓存 | Litecache | `config.cache_store = :litecache` |
+| 缓存 | Litecache | `config.cache_store = :litecache`（可加 path / L1 选项） |
 | 任务 | Litejob | `config.active_job.queue_adapter = :litejob` |
 | Cable | Litecable | `config/cable.yml` → `adapter: litecable` |
 | 英文 FTS | Litesearch | `tokenizer :porter` / `:trigram` 等内置分词器 |
 | 指标 | Litemetric / Liteboard | 可选 |
+
+### Litecache：进程内 L1 与多 worker 失效（可选）
+
+默认 **不开启** L1，避免写放大。单进程开发可只开 L1；多 Puma worker 需要跨进程一致时再开失效。
+
+```ruby
+# config/environments/production.rb（生成器会写入 path；L1 需自行打开）
+config.cache_store = :litecache, {
+  path: Rails.root.join("storage", Rails.env, "cache.sqlite3").to_s,
+  # gem "honker" 后：
+  # l1: true,
+  # invalidate: :honker,  # 或 :ttl（仅软 TTL，无需 honker）
+}
+```
+
+| `invalidate` | 含义 |
+|--------------|------|
+| `:none`（默认） | 仅同进程 L1（若 `l1: true`） |
+| `:ttl` | 软 TTL 背书，多进程最终一致 |
+| `:honker` | 与 cache 文件同事务 `notify`，对端丢 L1；不可用时回退 `:ttl` |
+
+完整 YAML 样例：`samples/litecache.honker.yml`。设计与 benchmark：`docs/plans/litecache-l1-honker-design-review.md`、`bench/bench_litecache_l1.rb`。
+
+**默认策略：** 生成器与 gem 默认保持 `l1: false` / `invalidate: :none`。在本地跑通 `compare` 与多 worker soak 前，不要把 L1/honker 设成全局默认。
 
 ### 安装步骤
 

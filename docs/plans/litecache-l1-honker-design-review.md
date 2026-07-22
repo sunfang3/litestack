@@ -210,9 +210,16 @@ CI policy (recommended):
 | 2 | L1 fill on get/set; LRU + size skip + soft TTL | ✅ |
 | 3 | Soft TTL multi-process backstop (`invalidate: :ttl`) | ✅ auto l1 + default TTL |
 | 4 | Honker transactional notify + listener | ✅ `invalidate: :honker`; bench `l1_drop` |
-| 5 | Rails adapter soak / default-on decision | later |
+| 5 | Rails adapter + generator/docs + default policy | ✅ AS store options, `config/litecache.yml`, docs; **defaults stay off** |
 
 **Do not** flip `l1: true` / `invalidate: :honker` by default until product soak and write-tax gates are accepted.
+
+### Step 5 notes
+
+- `ActiveSupport::Cache::Litecache` forwards `l1` / `invalidate` / notify options to `::Litecache`.
+- Install generator writes `config/litecache.yml` (commented recommendations) and a production `cache_store` hash with a stable `storage/<env>/cache.sqlite3` path.
+- `set_multi` already emits one `mset` notify (no separate `notify_batch_ms` yet).
+- Default-on remains **rejected** until multi-worker soak + write-tax review.
 
 ---
 

@@ -52,4 +52,28 @@ class TestCacheStoreContract < Minitest::Test
     @cache.clear
     assert_nil @cache.read("x")
   end
+
+  def test_l1_options_pass_through
+    cache = ActiveSupport::Cache::Litecache.new(
+      path: ":memory:",
+      sleep_interval: 60,
+      l1: true,
+      invalidate: :ttl,
+      l1_ttl_default: 2
+    )
+    assert cache.l1_enabled?
+    assert_equal :ttl, cache.invalidate_mode
+    cache.write("a", "b")
+    assert_equal "b", cache.read("a")
+    assert cache.l1_stats[:enabled]
+    assert cache.stats.is_a?(Hash)
+    assert cache.stats[:l1] || cache.stats["l1"]
+  ensure
+    cache&.close rescue nil
+  end
+
+  def test_l1_off_by_default_on_store
+    refute @cache.l1_enabled?
+    assert_equal :none, @cache.invalidate_mode
+  end
 end
