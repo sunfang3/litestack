@@ -7,3 +7,5 @@ gemspec path: "../"
 
 gem "rails", "~> 8.1", "< 9"
 gem "sqlite3", "~> 2.0"
+
+gem "honker", path: "../../honker/packages/honker-ruby", require: false

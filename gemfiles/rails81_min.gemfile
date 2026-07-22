@@ -7,3 +7,6 @@ gemspec path: "../"
 
 gem "rails", "8.1.0"
 gem "sqlite3", "~> 2.0"
+
+# Optional peer (same as root Gemfile); path relative to this file's parent repo layout.
+gem "honker", path: "../../honker/packages/honker-ruby", require: false
