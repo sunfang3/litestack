@@ -3,13 +3,18 @@
 <a href="https://badge.fury.io/rb/litestack" target="_blank"><img height="21" style='border:0px;height:21px;' border='0' src="https://badge.fury.io/rb/litestack.svg" alt="Gem Version"></a>
 <a href='https://rubygems.org/gems/litestack' target='_blank'><img height='21' style='border:0px;height:21px;' src='https://img.shields.io/gem/dt/litestack?color=brightgreen&label=Rubygems%20Downloads' border='0' alt='RubyGems Downloads' /></a>
 
-# Litestack 1.0
+# Litestack 1.1
 
 **All your data infrastructure, in a gem.**
 
 Litestack is a Ruby gem that gives Ruby and Rails apps an all-in-one SQLite data plane: SQL database, cache, job queue, pub/sub for Action Cable, full-text search, optional vector search, and metrics — without running separate Redis, Postgres, Elasticsearch, or Sidekiq-class services for those roles.
 
 Compared with multi-server stacks, Litestack aims for **high performance**, **low operational surface**, and **simple configuration**. Background workers detect Fiber-based environments (Async/Falcon, Polyphony) and prefer fibers when available.
+
+> **This fork (`sunfang3/litestack`) publishes `1.1.0+` to GitHub Packages only**  
+> (`rubygems.pkg.github.com/sunfang3`), not RubyGems.org.  
+> Install: **[docs/RELEASE_GITHUB_PACKAGES.md](docs/RELEASE_GITHUB_PACKAGES.md)** ·  
+> Upstream history: [oldmoe/litestack](https://github.com/oldmoe/litestack).
 
 Why Litestack: **[WHYLITESTACK.md](WHYLITESTACK.md)** · Benchmarks: **[BENCHMARKS.md](BENCHMARKS.md)**
 
@@ -28,32 +33,53 @@ A typical Rails app using Litestack can drop or avoid:
 
 ---
 
-## Requirements (1.0)
+## Requirements (1.1)
 
 | Runtime | Supported | Unsupported |
 |---------|-----------|-------------|
-| **Ruby** | `>= 4.0` (verified 4.0.0, 4.0.5) | Ruby &lt; 4.0 |
+| **Ruby** | `>= 4.0` (verified 4.0.0, 4.0.5+) | Ruby &lt; 4.0 |
 | **Rails** (optional) | `>= 8.1, < 9` (verified 8.1.0, 8.1.3) | Rails &lt; 8.1, Rails 9+ |
 | **sqlite3** gem | 2.x | 1.x |
 
 - Rails is **not** a runtime dependency. Standalone: `require "litestack"`.
 - Loading Railtie/adapters on an unsupported Rails version raises `Litestack::UnsupportedFrameworkVersionError`.
 - **Upgrading from 0.4.x:** read **[docs/MIGRATING_TO_RUBY4_RAILS81.md](docs/MIGRATING_TO_RUBY4_RAILS81.md)** (durable backup, quiescence, Solid Cache/Queue cleanup). The install generator **never** auto-deletes Solid gems.
+- **1.1.0 highlights:** optional [Honker](docs/HONKER.md) integration (wake / claim-ack / L1 invalidate / cable transport / lifecycle).
 
 ---
 
-## Installation
+## Installation (this fork — GitHub Packages)
 
-```bash
-bundle add litestack   # Ruby >= 4.0
+**Do not** use bare `gem "litestack"` / `bundle add litestack` for **1.1.0+** of this fork — that resolves **RubyGems.org** (upstream), not Packages.
+
+```ruby
+# Gemfile
+source "https://rubygems.org"
+
+source "https://rubygems.pkg.github.com/sunfang3" do
+  gem "litestack", "1.1.0"
+  # optional peer for multi-worker wake / L1 / claim / lifecycle:
+  gem "honker", "0.4.0"
+end
 ```
 
-Rails 8.1+ full stack:
+```bash
+# Classic PAT with at least read:packages (username is your GitHub login)
+export BUNDLE_RUBYGEMS__PKG__GITHUB__COM="YOUR_GH_USERNAME:YOUR_PAT"
+# permanent local config:
+#   bundle config set --local rubygems.pkg.github.com "YOUR_GH_USERNAME:YOUR_PAT"
+
+bundle install
+```
+
+Rails 8.1+ full stack (after the gem is on the load path):
 
 ```bash
 bin/rails generate litestack:install
 bin/rails db:prepare
 ```
+
+Package host, visibility, CI secrets: **[docs/RELEASE_GITHUB_PACKAGES.md](docs/RELEASE_GITHUB_PACKAGES.md)**.
 
 The generator wires **Litedb / Litecache / Litejob / Litecable**, drops
 `config/initializers/litestack_extensions.rb` (optional paths), and updates
@@ -100,13 +126,16 @@ It accelerates multi-process wake, claim/ack jobs, cache L1 invalidate, and job 
 
 | | |
 |--|--|
-| **Install** | GitHub Packages `sunfang3` — see **[docs/HONKER.md](docs/HONKER.md)** |
-| **Gemfile** | `source "https://rubygems.pkg.github.com/sunfang3" do gem "honker", "0.4.0" end` |
-| **Auth** | `BUNDLE_RUBYGEMS__PKG__GITHUB__COM=user:PAT` (scope `read:packages`) |
-| **Defaults** | Polling / no L1 until you opt in (`wakeup`, `transport`, `invalidate`, …) |
-| **Samples** | `samples/litejob.honker.yml`, `litecable.honker.yml`, `litecache.honker.yml` |
+| **Install** | Same Packages source as litestack — **[docs/HONKER.md](docs/HONKER.md)** |
+| **Gemfile** | Put `gem "honker", "0.4.0"` in the `sunfang3` source block above |
+| **Auth** | `BUNDLE_RUBYGEMS__PKG__GITHUB__COM=user:PAT` (`read:packages`) |
+| **Defaults** | Polling / no L1 until you opt in |
+| **Activate all** | **[docs/HONKER_FULL_STACK_BENCH.md](docs/HONKER_FULL_STACK_BENCH.md)** |
+| **Status** | `bundle exec rake litestack:honker:status` |
+| **Demo app** | `bundle exec rake examples:honker_rails` |
+| **Samples** | `samples/*.honker.yml`, `examples/honker_rails/config/` |
 
-Capability table and Rails notes: **[docs/HONKER.md](docs/HONKER.md)** · full stack: **[docs/RAILS_FULL_STACK.md](docs/RAILS_FULL_STACK.md)**.
+Capability table: **[docs/HONKER.md](docs/HONKER.md)** · full stack: **[docs/RAILS_FULL_STACK.md](docs/RAILS_FULL_STACK.md)**.
 
 ---
 

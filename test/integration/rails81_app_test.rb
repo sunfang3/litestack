@@ -4,6 +4,7 @@
 # Run via: bundle exec rake integration:rails81
 
 require "minitest/autorun"
+require_relative "../../lib/litestack/version"
 require_relative "../support/rails_app_builder"
 
 class Rails81AppTest < Minitest::Test
@@ -24,7 +25,7 @@ class Rails81AppTest < Minitest::Test
       assert_match(/JOB_OK/, out)
       assert_match(/CABLE_OK/, out)
       assert_match(/8\.1/, out)
-      assert_match(/Litestack=1\.0\.0/, out)
+      assert_match(/Litestack=#{Regexp.escape(Litestack::VERSION)}/, out)
     ensure
       if builder && !passed?
         warn builder.log.last(80).join("\n")

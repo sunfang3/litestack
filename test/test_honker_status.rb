@@ -31,6 +31,7 @@ describe "Litestack::HonkerStatus" do
   it "live-probes components when honker is available" do
     skip "honker gem not available" unless Litestack::Wakeup::Honker.load_honker_gem!
 
+    Litejobqueue.reset_singleton! if Litejobqueue.respond_to?(:reset_singleton!)
     Dir.mktmpdir("honker-status-") do |dir|
       path = File.join(dir, "probe.sqlite3")
       FileUtils.touch(path)
@@ -44,6 +45,8 @@ describe "Litestack::HonkerStatus" do
       assert comps["litecable.transport"][:active], comps["litecable.transport"].inspect
       assert report[:ok], report.inspect
     end
+  ensure
+    Litejobqueue.reset_singleton! if Litejobqueue.respond_to?(:reset_singleton!)
   end
 
   it "run_cli! returns 0 when gem loads (non-strict)" do

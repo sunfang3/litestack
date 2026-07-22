@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+- **Docs (1.1.0 install)**: README + `docs/RELEASE_GITHUB_PACKAGES.md` cover
+  Packages-only install, visibility/`read:packages` permissions, and CI secret
+  `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` (no PAT rotation required in-repo).
+- **CI**: `HonkerStatus` resets Litejobqueue singleton before live probe;
+  Rails 8.1 integration asserts dynamic `Litestack::VERSION`.
 - **Honker full-stack bench**: `bench/bench_honker_stack.rb` /
   `rake bench:honker_stack` multi-process job (poll vs honker), LiteCache L1 +
   invalidate, LiteCable latency; guide `docs/HONKER_FULL_STACK_BENCH.md`.

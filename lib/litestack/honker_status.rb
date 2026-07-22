@@ -140,6 +140,9 @@ module Litestack
       # --- LiteJob: wakeup + backend ---
       q = nil
       begin
+        # Process-wide singleton may already hold a :memory: queue from tests —
+        # reset so we actually open the probe path with Honker options.
+        Litejobqueue.reset_singleton! if Litejobqueue.respond_to?(:reset_singleton!)
         q = Litejobqueue.jobqueue(
           path: path,
           backend: :honker,
@@ -175,6 +178,7 @@ module Litestack
         rescue
           nil
         end
+        Litejobqueue.reset_singleton! if Litejobqueue.respond_to?(:reset_singleton!)
       end
 
       # --- LiteCache L1 + invalidate ---
