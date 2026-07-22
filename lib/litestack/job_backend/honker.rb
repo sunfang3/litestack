@@ -44,9 +44,7 @@ module Litestack
         :honker
       end
 
-      def worker_id
-        @worker_id
-      end
+      attr_reader :worker_id
 
       def setup!
         opts = {}
@@ -92,7 +90,9 @@ module Litestack
         raw = q.get_job(id.to_i)
         payload = raw && raw["payload"]
         q.cancel(id.to_i)
-        payload ? [payload.is_a?(String) ? payload : JSON.dump(payload)] : nil
+        if payload
+          [payload.is_a?(String) ? payload : JSON.dump(payload)]
+        end
       end
 
       # Returns a handle: { id:, serialized:, queue:, job: Honker::Job }

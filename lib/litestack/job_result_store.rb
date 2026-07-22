@@ -6,7 +6,7 @@ module Litestack
   # Persist job outcomes so waiters can block until completion.
   # Uses a small table on the queue database (works for string and integer ids).
   class JobResultStore
-    TABLE_SQL = <<~SQL.freeze
+    TABLE_SQL = <<~SQL
       CREATE TABLE IF NOT EXISTS _litestack_job_results(
         job_id TEXT PRIMARY KEY NOT NULL,
         status TEXT NOT NULL,

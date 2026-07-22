@@ -65,7 +65,7 @@ module Litestack
     def self.read_recent(path:, topic: DEFAULT_TOPIC, limit: 50, extension_path: nil, watcher_poll_interval_ms: 5)
       path = path.to_s
       topic = topic.to_s
-      limit = [[limit.to_i, 1].max, 500].min
+      limit = limit.to_i.clamp(1, 500)
 
       unless path != "" && path != ":memory:" && Litestack::Wakeup::Honker.watchable_path?(path)
         return {enabled: false, topic: topic, events: [], reason: "queue path not watchable"}

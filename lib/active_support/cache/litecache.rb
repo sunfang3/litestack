@@ -38,7 +38,7 @@ module ActiveSupport
 
       def initialize(options = {})
         options = options ? options.dup : {}
-        super(options)
+        super
         @options[:return_full_record] = true
         # Do NOT mutate ActiveSupport::Cache.format_version — use the host app's coder.
         @cache = ::Litecache.new(litecache_options)

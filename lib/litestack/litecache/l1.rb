@@ -6,7 +6,7 @@
 # separately (see docs/plans/litecache-l1-honker-design-review.md).
 class Litecache
   class L1
-    Entry = Struct.new(:value, :expires_at, keyword_init: true)
+    Entry = Struct.new(:value, :expires_at)
 
     attr_reader :hits, :misses
 
@@ -128,7 +128,7 @@ class Litecache
       now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       candidates = []
       candidates << (now + @ttl) if @ttl.positive?
-      if expires_in && expires_in.to_f.positive?
+      if expires_in&.to_f&.positive?
         candidates << (now + expires_in.to_f)
       end
       candidates.min

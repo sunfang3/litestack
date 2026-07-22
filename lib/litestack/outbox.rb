@@ -56,11 +56,10 @@ module Litestack
       name = (options[:database_name] || options[:ar_connection] || "primary").to_s
       cfg = ActiveRecord::Base.connection_db_config
       if name == "primary" || (cfg && cfg.name.to_s == name)
-        ActiveRecord::Base.connection
       else
         # Multi-db: prefer the currently checked-out connection when it matches.
-        ActiveRecord::Base.connection
       end
+      ActiveRecord::Base.connection
     end
 
     # Insert a LiteQueue-format row on +raw+ (already inside AR's transaction).
@@ -116,4 +115,3 @@ module Litestack
     end
   end
 end
-

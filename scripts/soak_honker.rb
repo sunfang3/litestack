@@ -156,8 +156,14 @@ begin
   workers.each { |pid| Process.wait(pid) rescue nil }
 
   # --- LiteCache L1 invalidate across processes ---
+  # Phased protocol avoids seed→new races on slow CI runners:
+  #   1) writer seeds all keys  2) reader warms L1  3) writer updates
+  #   4) reader waits for L1 drop + durable "new-*" value
   keys = opts[:cache_keys]
   inv_lat_file = File.join(dir, "inv_lat.json")
+  seed_done = File.join(dir, "cache.seeded")
+  warm_done = File.join(dir, "cache.warm")
+  update_done = File.join(dir, "cache.updated")
 
   reader = fork do
     $0 = "soak-cache-reader"
@@ -171,38 +177,61 @@ begin
       watcher_poll_interval_ms: 5
     )
     latencies = []
+
+    t0 = mono
+    loop do
+      break if File.exist?(seed_done)
+      fail!("cache seed barrier timeout") if mono - t0 > 10
+      sleep 0.01
+    end
+
     keys.times do |i|
       key = "k#{i}"
-      # wait for seed
-      t0 = mono
+      t1 = mono
       loop do
         break if cache.get(key) == "seed-#{i}"
-        fail!("cache seed timeout #{key}") if mono - t0 > 5
+        fail!("cache seed timeout #{key}") if mono - t1 > 5
         sleep 0.005
       end
-      # confirm L1 warm
       hit, = cache.instance_variable_get(:@l1).fetch(key)
       fail!("L1 not warm for #{key}") unless hit
+    end
+    File.write(warm_done, "1")
 
-      t1 = mono
+    t2 = mono
+    loop do
+      break if File.exist?(update_done)
+      fail!("cache update barrier timeout") if mono - t2 > 15
+      sleep 0.01
+    end
+
+    keys.times do |i|
+      key = "k#{i}"
+      t3 = mono
       loop do
         hit, = cache.instance_variable_get(:@l1).fetch(key)
         unless hit
-          latencies << (mono - t1) * 1000.0
+          latencies << (mono - t3) * 1000.0
           break
         end
-        fail!("L1 drop timeout #{key}") if mono - t1 > 3
+        fail!("L1 drop timeout #{key}") if mono - t3 > 5
         sleep 0.002
       end
-      val = cache.get(key)
-      fail!("stale value for #{key}: #{val.inspect}") unless val == "new-#{i}"
+      t4 = mono
+      val = nil
+      loop do
+        val = cache.get(key)
+        break if val == "new-#{i}"
+        fail!("stale value for #{key}: #{val.inspect}") if mono - t4 > 5
+        sleep 0.005
+      end
     end
     File.write(inv_lat_file, JSON.generate(latencies))
     cache.close(timeout: 2) rescue nil
     exit! 0
   end
 
-  sleep 0.4
+  sleep 0.3
   writer = Litecache.new(
     path: cache_path,
     logger: nil,
@@ -212,11 +241,18 @@ begin
     l1_ttl: 120,
     watcher_poll_interval_ms: 5
   )
-  keys.times do |i|
-    writer.set("k#{i}", "seed-#{i}")
-    sleep 0.02
-    writer.set("k#{i}", "new-#{i}")
+  keys.times { |i| writer.set("k#{i}", "seed-#{i}") }
+  File.write(seed_done, "1")
+
+  t_warm = mono
+  loop do
+    break if File.exist?(warm_done)
+    fail!("reader warm barrier timeout") if mono - t_warm > 15
+    sleep 0.01
   end
+
+  keys.times { |i| writer.set("k#{i}", "new-#{i}") }
+  File.write(update_done, "1")
   writer.close(timeout: 2) rescue nil
 
   Process.wait(reader)

@@ -28,7 +28,7 @@ module ActiveJob
         rescue
           nil
         end
-        if queue && queue.respond_to?(:options) && queue.options.key?(:enqueue_after_transaction_commit)
+        if queue&.respond_to?(:options) && queue.options.key?(:enqueue_after_transaction_commit)
           return !!queue.options[:enqueue_after_transaction_commit]
         end
         !!Job.options[:enqueue_after_transaction_commit]

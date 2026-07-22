@@ -133,7 +133,7 @@ class Litejobqueue < Litequeue
         options[:wakeup_filter_notifications] = true
       end
     end
-    super(options)
+    super
 
     # group and order queues according to their priority
     pgroups = {}
@@ -231,7 +231,7 @@ class Litejobqueue < Litequeue
       # via process_job path. For bare pop API, ack immediately after claim so pop
       # stays destructive-compatible.
       if limit == 1 && claim.length >= 2
-        id, serialized, honker_job = claim
+        id, serialized, _ = claim
         @job_backend.ack(claim)
         [id, serialized]
       else
@@ -456,16 +456,14 @@ class Litejobqueue < Litequeue
     @result_store = Litestack::JobResultStore.new(self, @options)
     @lifecycle = Litestack::Lifecycle.new(@options)
 
-    if @options[:leadership] != false && Litestack::Wakeup::Honker.watchable_path?(@options[:path])
-      @gc_leadership = Litestack::Leadership.new(
+    @gc_leadership = if @options[:leadership] != false && Litestack::Wakeup::Honker.watchable_path?(@options[:path])
+      Litestack::Leadership.new(
         path: @options[:path],
         name: "litestack:litejob:gc",
         ttl_s: @options[:leadership_ttl] || 30,
         extension_path: @options[:honker_extension_path],
         watcher_poll_interval_ms: @options[:watcher_poll_interval_ms]
       )
-    else
-      @gc_leadership = nil
     end
 
     count = @options[:workers].to_i
@@ -591,10 +589,8 @@ class Litejobqueue < Litequeue
     # Destructive: [id, serialized]
     # Honker: [id, serialized, job]
     if payload.is_a?(Array) && payload.length >= 3
-      [payload[0], payload[1], payload]
-    else
-      [payload[0], payload[1], payload]
     end
+    [payload[0], payload[1], payload]
   end
 
   # create a gc for dead jobs
