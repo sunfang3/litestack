@@ -21,9 +21,12 @@ LiteJob and LiteCable can use the optional [`honker`](https://github.com/russell
   until the worker stores the perform return value or a terminal failure.
 - **Lifecycle stream** (`lifecycle_stream: true`): optional Honker stream of
   `job.enqueued` / `started` / `succeeded` / `retried` / `dead` events.
-- **LiteCache L1 design review + regression bench** (no L1 behaviour change yet):
+- **LiteCache L1 design review + regression bench**:
   `docs/plans/litecache-l1-honker-design-review.md`,
-  `bench/bench_litecache_l1.rb` (`baseline` / `compare` / `invalidate`).
+  `bench/bench_litecache_l1.rb` (`baseline` / `l1_local` / `compare` / `invalidate`).
+- **LiteCache process-local L1** (opt-in, default off): `l1: true` with LRU
+  (`l1_max_entries`), size skip (`l1_max_value_bytes`), optional soft TTL
+  (`l1_ttl`). Same-process only; Honker invalidate is not enabled yet.
 
 ## [1.0.0] - 2026-07-17
 

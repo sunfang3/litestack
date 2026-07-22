@@ -3,6 +3,7 @@
 # all components should require the support module
 require_relative "litesupport"
 require_relative "litemetric"
+require_relative "litecache/l1"
 
 ##
 # Litecache is a caching library for Ruby applications that is built on top of SQLite. It is designed to be simple to use, very fast, and feature-rich, providing developers with a reliable and efficient way to cache data.
@@ -13,7 +14,8 @@ require_relative "litemetric"
 #
 # Litecache also supports integer value increment/decrement, which allows developers to increment or decrement the value of a cached item in a thread-safe manner. This is useful for implementing counters or other types of numerical data that need to be updated frequently.
 #
-# Overall, Litecache is a powerful and flexible caching library that provides automatic key expiry, LRU removal, and integer value increment/decrement capabilities. Its fast performance and simple API make it an excellent choice for Ruby applications that need a reliable and efficient way to cache data.
+# Optional process-local L1 (default off): see docs/plans/litecache-l1-honker-design-review.md
+#   Litecache.new(l1: true, l1_max_entries: 10_000, l1_ttl: 0)
 
 class Litecache
   include Litesupport::Liteconnection
@@ -29,6 +31,10 @@ class Litecache
   #   min_size: 32 * 1024 -> 32KB
   #   return_full_record: false -> only return the payload
   #   sleep_interval: 1 -> 1 second of sleep between cleanup runs
+  #   l1: false -> process-local L1 (opt-in)
+  #   l1_max_entries: 10_000
+  #   l1_max_value_bytes: 65_536 — skip L1 for larger values
+  #   l1_ttl: 0 — soft TTL in seconds (0 = only explicit delete/clear/L2 miss)
 
   DEFAULT_OPTIONS = {
     path: -> { Litesupport.root.join("cache.sqlite3") },
@@ -40,7 +46,11 @@ class Litecache
     min_size: 8 * 1024 * 1024, # 16MB
     return_full_record: false, # only return the payload
     sleep_interval: 30, # 30 seconds
-    metrics: false
+    metrics: false,
+    l1: false,
+    l1_max_entries: 10_000,
+    l1_max_value_bytes: 65_536,
+    l1_ttl: 0
   }
 
   # creates a new instance of Litecache
@@ -82,6 +92,7 @@ class Litecache
       end
       retry
     end
+    l1_set(key, value, expires_in: expires_in)
     true
   end
 
@@ -93,6 +104,7 @@ class Litecache
         key = k.to_s
         run_stmt(:setter, key, v, expires_in)
         capture(:set, key)
+        l1_set(key, v, expires_in: expires_in)
       rescue SQLite3::FullException
         run_stmt(extra_pruner, 0.2)
         run_sql("vacuum")
@@ -118,6 +130,9 @@ class Litecache
       cache.execute("vacuum")
       retry
     end
+    if changes > 0
+      l1_set(key, value, expires_in: expires_in)
+    end
     changes > 0
   end
 
@@ -125,10 +140,19 @@ class Litecache
   # if the key doesn't exist or it is expired then null will be returned
   def get(key)
     key = key.to_s
-    if (record = run_stmt(:getter, key)[0])
+    hit, value = l1_fetch(key)
+    if hit
       capture(:get, key, 1)
-      return record[1]
+      return value
     end
+    if (record = run_stmt(:getter, key)[0])
+      value = record[1]
+      # Approximate remaining TTL for L1 soft expiry (best-effort from L2 expires_in unix)
+      l1_set(key, value, expires_in: remaining_ttl_from_record(record))
+      capture(:get, key, 1)
+      return value
+    end
+    l1_delete(key) # ensure stale L1 cannot linger if L2 expired
     capture(:get, key, 0)
     nil
   end
@@ -137,13 +161,32 @@ class Litecache
   # is returned,
   def get_multi(*keys)
     results = {}
+    missing = []
+    original = {}
+
+    keys.each do |orig|
+      key = orig.to_s
+      original[key] = orig
+      hit, value = l1_fetch(key)
+      if hit
+        results[orig] = value
+        capture(:get, key, 1)
+      else
+        missing << key
+      end
+    end
+
+    return results if missing.empty?
+
     transaction(:deferred) do |conn|
-      keys.length.times do |i|
-        key = keys[i].to_s
+      missing.each do |key|
         if (record = run_stmt(:getter, key)[0])
-          results[keys[i]] = record[1] # use the original key format
+          value = record[1]
+          results[original[key]] = value
+          l1_set(key, value, expires_in: remaining_ttl_from_record(record))
           capture(:get, key, 1)
         else
+          l1_delete(key)
           capture(:get, key, 0)
         end
       end
@@ -153,18 +196,23 @@ class Litecache
 
   # delete a key, value pair from the cache
   def delete(key)
+    key = key.to_s
     changes = 0
     @conn.acquire do |cache|
       cache.stmts[:deleter].execute!(key)
       changes = cache.changes
     end
+    l1_delete(key)
     changes > 0
   end
 
   # increment an integer value by amount, optionally add an expiry value (in seconds)
   def increment(key, amount = 1, expires_in = nil)
+    key = key.to_s
     expires_in ||= @expires_in
-    @conn.acquire { |cache| cache.stmts[:incrementer].execute!(key.to_s, amount, expires_in)[0][0] }
+    # Counters stay L2-authoritative; drop L1 to avoid cross-read races.
+    l1_delete(key)
+    @conn.acquire { |cache| cache.stmts[:incrementer].execute!(key, amount, expires_in)[0][0] }
   end
 
   # decrement an integer value by amount, optionally add an expiry value (in seconds)
@@ -183,6 +231,8 @@ class Litecache
         cache.stmts[:pruner].execute!
       end
     end
+    # L2 prune may drop arbitrary keys — flush L1 to avoid serving orphans.
+    l1_clear
   end
 
   # return the number of key, value pairs in the cache
@@ -198,11 +248,13 @@ class Litecache
   # delete all key, value pairs in the cache
   def clear
     run_sql("delete FROM data")
+    l1_clear
   end
 
   # close the connection to the cache file (idempotent via Liteconnection)
   def close(timeout: shutdown_timeout)
     @running = false
+    l1_clear
     super
   end
 
@@ -220,15 +272,87 @@ class Litecache
         size: size,
         max_size: max_size,
         entries: count
-      }
+      },
+      l1: l1_stats
     }
+  end
+
+  def l1_enabled?
+    !!@l1
+  end
+
+  def l1_stats
+    if @l1
+      @l1.stats
+    else
+      {
+        enabled: false,
+        hits: 0,
+        misses: 0,
+        hit_rate: 0.0,
+        entries: 0,
+        invalidate_mode: "none"
+      }
+    end
   end
 
   private
 
   def setup
     super # create connection
+    @l1 = build_l1
     @bgthread = track_worker(spawn_worker) # create background pruner thread
+  end
+
+  def build_l1
+    return nil unless truthy?(@options[:l1])
+
+    L1.new(
+      max_entries: @options[:l1_max_entries] || 10_000,
+      max_value_bytes: @options[:l1_max_value_bytes] || 65_536,
+      ttl: @options[:l1_ttl] || 0
+    )
+  end
+
+  def truthy?(v)
+    v == true || v.to_s == "true" || v.to_s == "1"
+  end
+
+  def l1_fetch(key)
+    return [false, nil] unless @l1
+
+    @l1.fetch(key)
+  end
+
+  def l1_set(key, value, expires_in: nil)
+    return unless @l1
+
+    @l1.set(key, value, expires_in: expires_in)
+  end
+
+  def l1_delete(key)
+    return unless @l1
+
+    @l1.delete(key)
+  end
+
+  def l1_clear
+    return unless @l1
+
+    @l1.clear
+  end
+
+  # record = [id, value, expires_in_unix] from getter
+  def remaining_ttl_from_record(record)
+    exp = record[2]
+    return nil unless exp
+
+    remaining = exp.to_f - Time.now.to_f
+    return 0 if remaining <= 0
+
+    remaining
+  rescue
+    nil
   end
 
   def spawn_worker

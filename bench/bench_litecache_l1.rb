@@ -92,14 +92,14 @@ module LitecacheL1Bench
     }.merge(opts))
   end
 
-  def run_baseline(path: nil)
+  def run_baseline(path: nil, l1: false)
     dir = nil
     path ||= begin
       dir = Dir.mktmpdir("litecache-bench-")
       File.join(dir, "cache.sqlite3")
     end
 
-    cache = build_cache(path)
+    cache = build_cache(path, l1: l1)
     n = iters
     vsize = value_bytes
     keys = Array.new(n) { |i| "k#{i}" }
@@ -128,18 +128,21 @@ module LitecacheL1Bench
       cache.get_multi(*ks)
     end
 
-    # L1-ready counters (always zero until L1 ships; stable schema for compare)
+    # Hot-key L1 read: same key repeatedly (only meaningful when l1: true)
+    hot_m = measure(n) { cache.get(keys[0]) }
+
     l1_stats = l1_stats_from(cache)
 
     report = {
       version: 1,
-      mode: "baseline",
+      mode: l1 ? "l1_local" : "baseline",
       ruby: RUBY_DESCRIPTION,
       captured_at: Time.now.utc.iso8601,
       config: {
         iterations: n,
         value_bytes: vsize,
-        path_kind: (path.to_s == ":memory:") ? "memory" : "file"
+        path_kind: (path.to_s == ":memory:") ? "memory" : "file",
+        l1: l1
       },
       metrics: {
         set_ips: write_m[:ips],
@@ -148,6 +151,8 @@ module LitecacheL1Bench
         get_seconds: read_m[:seconds],
         get_random_ips: rand_m[:ips],
         get_random_seconds: rand_m[:seconds],
+        get_hot_ips: hot_m[:ips],
+        get_hot_seconds: hot_m[:seconds],
         delete_ips: del_m[:ips],
         delete_seconds: del_m[:seconds],
         set_multi_ips: multi_write[:ips],
@@ -218,7 +223,7 @@ module LitecacheL1Bench
            "value_bytes=#{cfg[:value_bytes] || cfg["value_bytes"]}"
     end
     if m
-      %w[set_ips get_ips get_random_ips delete_ips set_multi_ips get_multi_ips].each do |k|
+      %w[set_ips get_ips get_random_ips get_hot_ips delete_ips set_multi_ips get_multi_ips].each do |k|
         v = m[k.to_sym] || m[k]
         next unless v
 
@@ -358,17 +363,28 @@ module LitecacheL1Bench
     mode = argv[0] || "all"
     case mode
     when "baseline"
-      report = run_baseline
+      report = run_baseline(l1: false)
       print_report(report)
       path = save_report(report)
       puts "Wrote #{path}"
+    when "l1_local"
+      report = run_baseline(l1: true)
+      print_report(report)
+      path = save_report(report, File.expand_path("results/litecache_l1_local.json", __dir__))
+      puts "Wrote #{path}"
+      # Report hot vs sequential get ratio when L1 is warm
+      m = report[:metrics]
+      if m[:get_ips].to_f > 0 && m[:get_hot_ips].to_f > 0
+        puts format("  hot/seq get ratio  %10.2fx", m[:get_hot_ips] / m[:get_ips])
+      end
     when "compare"
       unless File.file?(out_path)
         warn "No baseline at #{out_path}; run: #{$PROGRAM_NAME} baseline"
         exit 1
       end
       baseline = load_report
-      current = run_baseline
+      # Always compare the default-off L2 path (regression gate for merges)
+      current = run_baseline(l1: false)
       print_report(current)
       failures = compare_reports(baseline, current)
       if failures.empty?
@@ -388,10 +404,17 @@ module LitecacheL1Bench
       path = save_report(report, File.expand_path("results/litecache_invalidate.json", __dir__))
       puts "Wrote #{path}"
     when "all"
-      base = run_baseline
+      base = run_baseline(l1: false)
       print_report(base)
       save_report(base)
       puts "Wrote #{out_path}"
+      l1 = run_baseline(l1: true)
+      print_report(l1)
+      save_report(l1, File.expand_path("results/litecache_l1_local.json", __dir__))
+      m = l1[:metrics]
+      if m[:get_ips].to_f > 0 && m[:get_hot_ips].to_f > 0
+        puts format("  hot/seq get ratio  %10.2fx", m[:get_hot_ips] / m[:get_ips])
+      end
       inv = run_invalidate
       unless inv[:skipped] || inv["skipped"]
         print_report(inv)
@@ -399,12 +422,13 @@ module LitecacheL1Bench
       end
     when "help", "-h", "--help"
       puts <<~HELP
-        Usage: #{$PROGRAM_NAME} [baseline|compare|invalidate|all]
+        Usage: #{$PROGRAM_NAME} [baseline|l1_local|compare|invalidate|all]
 
-        baseline   Measure current Litecache IPS; write JSON baseline
-        compare    Re-measure and exit 2 if IPS < LITESTACK_BENCH_REGRESSION of baseline
-        invalidate Cross-process visibility / future L1 invalidate latency
-        all        baseline + invalidate
+        baseline   Measure Litecache with L1 off; write JSON baseline
+        l1_local   Measure with L1 on (same-process); report hot-key get IPS
+        compare    Re-measure L1-off path; exit 2 if IPS < LITESTACK_BENCH_REGRESSION of baseline
+        invalidate Cross-process L2 visibility / future L1 invalidate latency
+        all        baseline + l1_local + invalidate
       HELP
     else
       warn "Unknown mode #{mode.inspect}"

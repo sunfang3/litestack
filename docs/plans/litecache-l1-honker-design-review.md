@@ -205,14 +205,14 @@ CI policy (recommended):
 
 | Step | Work | Exit criteria |
 |------|------|----------------|
-| 0 | Design review + baseline bench (this doc + script) | Baseline JSON checked in or regenerated locally |
-| 1 | L1 module + hooks, default off | Unit tests; **compare ≥ 95%** vs baseline |
-| 2 | L1 fill on get/set; LRU | L1 get IPS report; no multi-process claim |
-| 3 | Soft TTL invalidation | Document stale bound |
-| 4 | Honker transactional notify + listener | Invalidate p99 report; write tax ≥ 80% or flag-only |
-| 5 | Rails adapter smoke + multi-process soak | No open issues on fork |
+| 0 | Design review + baseline bench (this doc + script) | ✅ |
+| 1 | L1 module + hooks, default off | ✅ `lib/litestack/litecache/l1.rb`; `compare` gate |
+| 2 | L1 fill on get/set; LRU + size skip + soft TTL | ✅ `l1: true` opt-in; `l1_local` bench |
+| 3 | Soft TTL as multi-process backstop (`invalidate: :ttl`) | next |
+| 4 | Honker transactional notify + listener | next |
+| 5 | Rails adapter smoke + multi-process soak | later |
 
-**Do not** flip `l1: true` by default in step 1–3.
+**Do not** flip `l1: true` by default until step 4 gates pass.
 
 ---
 
