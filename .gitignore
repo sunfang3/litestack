@@ -28,3 +28,6 @@ Gemfile.lock
 /vendor/simple/**/*.so
 /vendor/simple/**/*.dylib
 /vendor/simple/**/*.dll
+
+# Local SQLite data (dev/test)
+/db/
