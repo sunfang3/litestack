@@ -31,6 +31,6 @@ begin
       end
     end
   end
-rescue LoadError, Gem::LoadError
-  # optional peer — leave Rails boot alone when honker is not installed
+rescue LoadError
+  # optional peer (includes Gem::LoadError) — leave boot alone if missing
 end
