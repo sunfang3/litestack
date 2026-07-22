@@ -40,6 +40,9 @@ LiteJob and LiteCable can use the optional [`honker`](https://github.com/russell
   stream events (`lifecycle_stream: true`); JSON at
   `/topics/Litejob/lifecycle.json` with 5s JS poll. Path via
   `LITEBOARD_QUEUE_PATH` / `LITEJOB_PATH` / default queue.sqlite3.
+- **Honker docs + generator templates**: `docs/HONKER.md` (install from GitHub
+  Packages `sunfang3`, capability matrix); generator adds `config/litejob.yml`
+  and comments on cable/cache; README / `RAILS_FULL_STACK.md` app Gemfile recipe.
 
 ## [1.0.0] - 2026-07-17
 

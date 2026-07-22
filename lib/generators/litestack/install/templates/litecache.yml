@@ -5,6 +5,11 @@
 # Defaults keep L1 off for zero write-amplification surprise. Multi-Puma-worker
 # apps that install gem "honker" can enable L1 + cross-process invalidate.
 #
+# Install honker (GitHub Packages) — see docs/HONKER.md:
+#   source "https://rubygems.pkg.github.com/sunfang3" do
+#     gem "honker", "0.4.0"
+#   end
+#
 # See docs/RAILS_FULL_STACK.md and samples/litecache.honker.yml
 
 development:

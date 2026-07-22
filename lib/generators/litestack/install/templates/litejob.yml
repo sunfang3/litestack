@@ -1,0 +1,51 @@
+# Litejob configuration (optional).
+# Active Job uses config_path: "./config/litejob.yml" by default via the adapter.
+#
+# Honker is optional (soft-require). Install via GitHub Packages — see docs/HONKER.md:
+#
+#   source "https://rubygems.pkg.github.com/sunfang3" do
+#     gem "honker", "0.4.0"
+#   end
+#
+# Full examples: samples/litejob.honker.yml
+
+development:
+  # path defaults under Litesupport.root (e.g. db/development/queue.sqlite3)
+  workers: 2
+  queues:
+    - [default, 1]
+  # wakeup: polling          # default
+  # wakeup: honker           # needs gem "honker" + file-backed path
+  # queue_notify: true
+  # wakeup_filter_notifications: true
+  # leadership: true
+  # job_results: true
+  # lifecycle_stream: true   # LiteBoard: /topics/Litejob lifecycle panel
+
+test:
+  workers: 0
+  queues:
+    - [default, 1]
+
+production:
+  # path: storage/production/queue.sqlite3
+  workers: 5
+  queues:
+    - [default, 1]
+    - [urgent, 10]
+  # Recommended multi-worker (gem "honker"):
+  # wakeup: honker
+  # watcher_poll_interval_ms: 5
+  # queue_notify: true
+  # wakeup_filter_notifications: true
+  # leadership: true
+  # lifecycle_stream: true
+  # job_results: true
+  #
+  # At-least-once (claim/ack):
+  # backend: honker
+  # visibility_timeout: 300
+  #
+  # Same DB as Rails primary (transactional outbox):
+  # database: primary
+  # outbox: true

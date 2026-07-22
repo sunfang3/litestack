@@ -1,14 +1,16 @@
 development:
   adapter: litecable
-  # Optional: cross-process notify via honker (gem "honker" required, file-backed path)
-  # transport: honker
   # path: storage/development/cable.sqlite3
+  # Optional: cross-process notify (requires gem "honker", file-backed path)
+  # transport: honker
+  # watcher_poll_interval_ms: 5
+  # See docs/HONKER.md and samples/litecable.honker.yml
 
 test:
   adapter: test
 
 production:
   adapter: litecable
-  # transport: honker
   # path: storage/production/cable.sqlite3
-
+  # transport: honker
+  # leadership: true   # single pruner when Honker locks available

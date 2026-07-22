@@ -93,6 +93,21 @@ config.litestack.data_path = Rails.root.join("storage")
 
 See issues **#91** / **#34** — path defaults are lazy so late `ENV` and programmatic config are honored.
 
+### Optional Honker (wake / L1 / lifecycle)
+
+[Honker](https://honker.dev) is an **optional** peer gem (not required to install Litestack).  
+It accelerates multi-process wake, claim/ack jobs, cache L1 invalidate, and job lifecycle streams.
+
+| | |
+|--|--|
+| **Install** | GitHub Packages `sunfang3` — see **[docs/HONKER.md](docs/HONKER.md)** |
+| **Gemfile** | `source "https://rubygems.pkg.github.com/sunfang3" do gem "honker", "0.4.0" end` |
+| **Auth** | `BUNDLE_RUBYGEMS__PKG__GITHUB__COM=user:PAT` (scope `read:packages`) |
+| **Defaults** | Polling / no L1 until you opt in (`wakeup`, `transport`, `invalidate`, …) |
+| **Samples** | `samples/litejob.honker.yml`, `litecable.honker.yml`, `litecache.honker.yml` |
+
+Capability table and Rails notes: **[docs/HONKER.md](docs/HONKER.md)** · full stack: **[docs/RAILS_FULL_STACK.md](docs/RAILS_FULL_STACK.md)**.
+
 ---
 
 ## Components

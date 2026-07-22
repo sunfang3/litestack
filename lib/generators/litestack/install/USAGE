@@ -3,14 +3,21 @@ Description:
 
     Configures (core stack — no native .so required):
       - config/database.yml → adapter: litedb (preserves multi-database entries when possible)
-      - config/cable.yml → adapter: litecable
+      - config/cable.yml → adapter: litecable (+ optional transport: honker comments)
+      - config/litejob.yml → optional wakeup / lifecycle / backend comments
+      - config/litecache.yml → optional L1 / invalidate comments
       - production cache_store → :litecache (+ path under storage/)
-      - config/litecache.yml → optional L1 / invalidate notes
       - production active_job.queue_adapter → :litejob
       - .gitignore → SQLite database files under db/
       - .dockerignore → same SQLite exclusions when the file exists (Rails 7.1+ default)
       - config/initializers/litestack_extensions.rb → optional libsimple / vectorlite paths
       - .gitignore → vendor/simple & vendor/vectorlite binary patterns
+
+    Optional peer gem Honker (not added to the app Gemfile automatically):
+      See docs/HONKER.md — GitHub Packages sunfang3:
+        source "https://rubygems.pkg.github.com/sunfang3" do
+          gem "honker", "0.4.0"
+        end
 
     Optional native extension download (needs network + python3):
       --with-simple       Download wangfenjin/simple (libsimple) into vendor/simple/
@@ -28,7 +35,7 @@ Description:
       export LITESTACK_EXTENSION_ROOT="$PWD"
       bundle exec ruby "$(bundle show litestack)/scripts/fetch_simple.rb"
 
-    Full guide: docs/RAILS_FULL_STACK.md
+    Full guide: docs/RAILS_FULL_STACK.md · Honker: docs/HONKER.md
 
     Does NOT automatically remove solid_cache, solid_queue, their migrations, or Gemfile lines.
     Optional cleanup steps are printed after install. See docs/MIGRATING_TO_RUBY4_RAILS81.md.

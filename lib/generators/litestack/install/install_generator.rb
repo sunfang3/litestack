@@ -57,6 +57,15 @@ class Litestack::InstallGenerator < Rails::Generators::Base
     end
   end
 
+  def create_litejob_config
+    dest = File.join(destination_root, "config/litejob.yml")
+    if File.exist?(dest)
+      say_status :skip, "config/litejob.yml already exists", :yellow
+    else
+      template "litejob.yml", "config/litejob.yml"
+    end
+  end
+
   def modify_cache_store_adapter
     production = File.join(destination_root, "config/environments/production.rb")
     return unless File.exist?(production)
@@ -103,17 +112,18 @@ class Litestack::InstallGenerator < Rails::Generators::Base
       return
     end
 
+    job_line = "config.active_job.queue_adapter = :litejob  # options: config/litejob.yml · docs/HONKER.md"
     if content.match?(/#\s*config\.active_job\.queue_adapter/)
       gsub_file "config/environments/production.rb",
         /#\s*config\.active_job\.queue_adapter.*/,
-        "config.active_job.queue_adapter = :litejob"
+        job_line
     elsif content.match?(/config\.active_job\.queue_adapter\s*=/)
       gsub_file "config/environments/production.rb",
         /config\.active_job\.queue_adapter\s*=.*/,
-        "config.active_job.queue_adapter = :litejob"
+        job_line
     else
       inject_into_file "config/environments/production.rb",
-        "\n  config.active_job.queue_adapter = :litejob\n",
+        "\n  #{job_line}\n",
         before: /^end\s*\z/
     end
   end
@@ -192,6 +202,7 @@ class Litestack::InstallGenerator < Rails::Generators::Base
   def print_optional_solid_cleanup
     say ""
     say "Litestack core stack installed (Litedb / Litecache / Litejob / Litecable).", :green
+    say "Optional Honker (wake / L1 / lifecycle): docs/HONKER.md · config/litejob.yml · litecache.yml · cable.yml", :cyan
 
     want_simple = options[:with_simple] || options[:with_extensions]
     want_vector = options[:with_vectorlite] || options[:with_extensions]

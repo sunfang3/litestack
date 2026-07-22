@@ -10,9 +10,37 @@
 
 | 文档 | 内容 |
 |------|------|
+| [HONKER.md](HONKER.md) | **可选** Honker：安装、能力表、配置样例 |
 | [MIGRATING_TO_RUBY4_RAILS81.md](MIGRATING_TO_RUBY4_RAILS81.md) | 1.0 升级、备份、Solid 清理 |
 | [LITESEARCH_ZH_PINYIN.md](LITESEARCH_ZH_PINYIN.md) | `:simple` 中文/拼音 API |
 | [LITEVECTOR.md](LITEVECTOR.md) | Litevector API 与限制 |
+
+---
+
+## 0. 应用 Gemfile：Litestack + 可选 Honker
+
+```ruby
+# Gemfile
+source "https://rubygems.org"
+
+gem "rails", "~> 8.1"
+gem "litestack"
+# …
+
+# Optional — multi-worker wake / L1 invalidate / job lifecycle stream
+# Package host: GitHub Packages (not rubygems.org)
+source "https://rubygems.pkg.github.com/sunfang3" do
+  gem "honker", "0.4.0"
+end
+```
+
+```bash
+# PAT needs read:packages
+export BUNDLE_RUBYGEMS__PKG__GITHUB__COM="YOUR_GH_USERNAME:YOUR_PAT"
+bundle install
+```
+
+生成器会写入注释版 `config/litejob.yml`、`config/litecache.yml` 与 `cable.yml` 提示；**不会**自动打开 Honker 特性。细节与能力矩阵：[HONKER.md](HONKER.md)。
 
 ---
 
@@ -66,12 +94,13 @@ bin/rails db:prepare
 
 生成器会处理：
 
-- `database.yml` / `cable.yml`
+- `database.yml` / `cable.yml`（含可选 `transport: honker` 注释）
+- `config/litejob.yml` / `config/litecache.yml`（Honker 选项注释）
 - production 的 cache / Active Job
 - `.gitignore` / `.dockerignore` 中的 SQLite 路径  
 - `config/initializers/litestack_extensions.rb`（扩展 path 探测）
 
-**默认不会**下载 vectorlite / libsimple，也**不会**删除 Solid gems（见迁移文档）。
+**默认不会**下载 vectorlite / libsimple，也**不会**删除 Solid gems（见迁移文档），**不会**把 Honker 写进应用 Gemfile（需按 §0 自行添加）。
 
 ### 安装时一并下载扩展（推荐显式一键）
 
