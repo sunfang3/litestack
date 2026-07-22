@@ -4,13 +4,29 @@ require_relative "helper"
 require "litestack/liteboard/liteboard"
 require "litestack/lifecycle"
 require "json"
+require "tmpdir"
+require "fileutils"
 
 describe "Liteboard lifecycle feed" do
   before do
     Litejobqueue.reset_singleton! if Litejobqueue.respond_to?(:reset_singleton!)
+    @metrics_dir = Dir.mktmpdir("liteboard-life-metrics-")
+    Litemetric.options = {
+      path: File.join(@metrics_dir, "metrics.sqlite3"),
+      flush_interval: 3600,
+      summarize_interval: 3600,
+      snapshot_interval: 3600
+    }
+    Singleton.__init__(Litemetric) if defined?(Singleton) && Singleton.respond_to?(:__init__)
+    Litemetric.instance_variable_set(:@singleton__instance__, nil) rescue nil
   end
 
   after do
+    Litemetric.instance.close rescue nil
+    Singleton.__init__(Litemetric) if defined?(Singleton) && Singleton.respond_to?(:__init__)
+    Litemetric.instance_variable_set(:@singleton__instance__, nil) rescue nil
+    Litemetric.options = nil
+    FileUtils.rm_rf(@metrics_dir) if @metrics_dir
     Litejobqueue.reset_singleton! if Litejobqueue.respond_to?(:reset_singleton!)
   end
 

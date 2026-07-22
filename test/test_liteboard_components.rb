@@ -15,6 +15,9 @@ class TestLiteboardComponents < Minitest::Test
 
   def teardown
     @lm&.close rescue nil
+    Singleton.__init__(Litemetric) if defined?(Singleton) && Singleton.respond_to?(:__init__)
+    Litemetric.instance_variable_set(:@singleton__instance__, nil) rescue nil
+    Litemetric.options = nil
     FileUtils.rm_rf(@dir)
   end
 

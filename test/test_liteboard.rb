@@ -19,6 +19,7 @@ class TestLiteboard < Minitest::Test
   def teardown
     @lm&.close rescue nil
     reset_litemetric_singleton!
+    Litemetric.options = nil
     FileUtils.rm_rf(@dir)
   end
 
