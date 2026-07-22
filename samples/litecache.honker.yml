@@ -28,10 +28,13 @@ production:
   sleep_interval: 30
 
 development:
-  # Single process: L1 alone is enough
+  # Multi-process / Puma workers: use honker invalidate (same as production)
   l1: true
-  invalidate: none
+  invalidate: honker
   l1_max_entries: 5000
+  l1_ttl_default: 5
+  notify_ops: [set, delete, clear]
+  watcher_poll_interval_ms: 5
 
 test:
   l1: false

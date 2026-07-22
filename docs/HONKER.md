@@ -136,6 +136,20 @@ LITEBOARD_QUEUE_PATH=storage/production/queue.sqlite3 bin/liteboard
 
 ---
 
+## Full activation + substantial benchmark
+
+Step-by-step checklist to turn **on every** Honker-bound LiteJob / LiteCache /
+LiteCable option, then run multi-process measurements:
+
+→ **[HONKER_FULL_STACK_BENCH.md](HONKER_FULL_STACK_BENCH.md)**
+
+```bash
+bundle exec rake litestack:honker:status   # must show all active
+bundle exec rake bench:honker_stack        # job + cache + cable JSON report
+```
+
+---
+
 ## Example Rails app (one command)
 
 Scaffold a **minimal Rails 8.1** app with Honker fully on (job backend + wakeup,

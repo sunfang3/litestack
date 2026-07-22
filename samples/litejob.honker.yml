@@ -30,27 +30,23 @@ production:
   fallback_interval: 5
   wakeup_filter_notifications: true
   queue_notify: true
-  # PR4: at-least-once claim/ack (visibility timeout reclaim after crash)
-  # backend: honker
-  # visibility_timeout: 300
-  # heartbeat_interval: 60    # long-job claim renewal during perform
+  # Full Honker activation (recommended multi-worker production):
+  backend: honker
+  visibility_timeout: 300
+  heartbeat_interval: 60    # long-job claim renewal during perform
   # heartbeat_extend: 300
+  leadership: true
+  job_results: true
+  result_ttl: 3600
+  lifecycle_stream: true
+  # lifecycle_stream_topic: litestack:litejob:events
 
-  # PR5: co-locate queue tables on the Rails primary SQLite file so
-  #   Order.transaction { order.save!; ReportJob.perform_later(order.id) }
-  # is one atomic COMMIT (set enqueue_after_transaction_commit false automatically).
+  # Optional: co-locate queue on Rails primary (transactional outbox)
   # database: primary
   # outbox: true
-  # table_prefix: litestack_   # → litestack_queue (default when database: primary)
+  # table_prefix: litestack_   # → litestack_queue
 
-  # Leadership GC, JobHandle#wait, durable event stream (LiteBoard feed)
-  # leadership: true
-  # job_results: true
-  # result_ttl: 3600
-  # lifecycle_stream: true
-  # lifecycle_stream_topic: litestack:litejob:events
-  #
-  # LiteBoard: open /topics/Litejob — "Job lifecycle stream" panel polls
-  # /topics/Litejob/lifecycle.json. Point at this queue file with:
-  #   LITEBOARD_QUEUE_PATH=storage/production/queue.sqlite3 liteboard
+  # LiteBoard: LITEBOARD_QUEUE_PATH=storage/production/queue.sqlite3 liteboard
+  # Bench: bundle exec rake bench:honker_stack
+  # Docs: docs/HONKER_FULL_STACK_BENCH.md
 

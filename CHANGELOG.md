@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+- **Honker full-stack bench**: `bench/bench_honker_stack.rb` /
+  `rake bench:honker_stack` multi-process job (poll vs honker), LiteCache L1 +
+  invalidate, LiteCable latency; guide `docs/HONKER_FULL_STACK_BENCH.md`.
+
 ## [1.1.0] - 2026-07-22
 
 Published to **GitHub Packages** (`rubygems.pkg.github.com/sunfang3`), not RubyGems.org.

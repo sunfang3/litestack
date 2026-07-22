@@ -78,6 +78,19 @@ bundle exec ruby bench/bench_litecache_l1.rb invalidate # cross-process visibili
 
 See `docs/plans/litecache-l1-honker-design-review.md` and `bench/results/README.md`.
 
+### Honker full stack (job + cache + cable)
+
+Multi-process comparison of polling vs Honker, L1 hot-read IPS, invalidate
+latency, and cable delivery latency:
+
+```sh
+bundle exec rake bench:honker_stack
+# larger: LITESTACK_BENCH_JOBS=300 LITESTACK_BENCH_CABLE_MSGS=80 bundle exec rake bench:honker_stack
+```
+
+Writes `bench/results/honker_stack.json`. Activation checklist:
+`docs/HONKER_FULL_STACK_BENCH.md`.
+
 For testing the cache we attempted to try writing and reading different payload sizes with a fixed key size
 
 ### Write

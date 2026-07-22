@@ -159,6 +159,11 @@ namespace :bench do
   task :litecache_l1_full do
     sh "bundle exec ruby bench/bench_litecache_l1.rb all"
   end
+
+  desc "Multi-process Honker stack bench (job + cache L1/invalidate + cable)"
+  task :honker_stack do
+    sh "bundle exec ruby bench/bench_honker_stack.rb"
+  end
 end
 
 namespace :package do
