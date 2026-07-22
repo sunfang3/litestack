@@ -41,13 +41,17 @@ Gem::Specification.new do |spec|
   spec.add_dependency "bigdecimal", ">= 3.1"
 
   # honker is an *optional* runtime peer (not required to install/load litestack).
-  # Declared only as a development dependency so the litestack test/bench suite can
-  # exercise wakeup / cable / L1 invalidate / lifecycle. Application Gemfiles that
-  # enable those features should add:
+  # Declared as a development dependency so the litestack test/bench suite can
+  # exercise wakeup / cable / L1 invalidate / lifecycle. Soft-require at runtime
+  # keeps polling/destructive defaults working without it.
   #
-  #   gem "honker"   # or path/github monorepo form — see this repo's Gemfile
+  # Application Gemfiles that enable those features should add (GitHub Packages):
   #
-  # Soft-require at runtime keeps polling/destructive defaults working without it.
+  #   source "https://rubygems.pkg.github.com/sunfang3" do
+  #     gem "honker", "0.4.0"
+  #   end
+  #
+  # Bundler source for development is set in this repo's Gemfile / gemfiles/.
 
   # Development dependencies — Rails version is controlled by Gemfile / appraisal gemfiles.
   spec.add_development_dependency "rake", "~> 13"
@@ -56,6 +60,6 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "standard", "~> 1"
   spec.add_development_dependency "sequel", "~> 5"
   spec.add_development_dependency "debug", "~> 1"
-  # Source resolved by root Gemfile (path: ../honker/... or github + glob).
-  spec.add_development_dependency "honker", ">= 0.4.0"
+  # Version pin; package source: https://rubygems.pkg.github.com/sunfang3
+  spec.add_development_dependency "honker", "0.4.0"
 end

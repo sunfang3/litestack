@@ -11,21 +11,8 @@ gem "sqlite3", "~> 2.0"
 
 # Honker — optional acceleration for LiteJob wakeup / LiteCable transport /
 # claim-ack / L1 invalidate / lifecycle stream (see docs/Integration_with_Honker.md).
-# Soft-required at runtime (features fall back when missing). For this monorepo
-# workspace, pin the local fork; CI/other machines can switch to the github source.
-#
-# Local (sibling checkout under investigations/):
-gem "honker",
-  path: "../honker/packages/honker-ruby",
-  require: false
-
-# Remote (fork / upstream monorepo — uncomment if path is unavailable):
-# gem "honker",
-#   github: "sunfang3/honker",
-#   glob: "packages/honker-ruby/honker.gemspec",
-#   require: false
-# # or upstream:
-# gem "honker",
-#   github: "russellromney/honker",
-#   glob: "packages/honker-ruby/honker.gemspec",
-#   require: false
+# Soft-required at runtime; features fall back when the gem is absent.
+# Published to GitHub Packages under sunfang3 (not rubygems.org).
+source "https://rubygems.pkg.github.com/sunfang3" do
+  gem "honker", "0.4.0"
+end
