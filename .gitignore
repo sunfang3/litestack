@@ -13,6 +13,10 @@
 Gemfile.lock
 .worktrees/
 
+# Scaffolded Honker Rails demo (rake examples:honker_rails)
+/tmp/honker_rails/
+/examples/honker_rails_app/
+
 # Local benchmark captures (machine-specific IPS)
 /bench/results/*.json
 

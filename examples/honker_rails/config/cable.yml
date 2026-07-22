@@ -1,0 +1,21 @@
+# Honker-on LiteCable transport for the example app.
+# Docs: docs/HONKER.md · samples/litecable.honker.yml
+
+development:
+  adapter: litecable
+  path: storage/development/cable.sqlite3
+  transport: honker
+  watcher_poll_interval_ms: 5
+  expire_after: 5
+  leadership: true
+
+test:
+  adapter: test
+
+production:
+  adapter: litecable
+  path: storage/production/cable.sqlite3
+  transport: honker
+  watcher_poll_interval_ms: 5
+  expire_after: 5
+  leadership: true

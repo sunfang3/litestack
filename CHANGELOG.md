@@ -57,6 +57,10 @@ LiteJob and LiteCable can use the optional [`honker`](https://github.com/russell
   `Litestack::HonkerStatus` reports gem load and live activation of LiteJob
   wakeup/backend, LiteCache invalidate, and LiteCable transport
   (`LITESTACK_HONKER_STRICT=1` for fail-closed exit).
+- **Honker Rails example**: `examples/honker_rails/` overlays +
+  `rake examples:honker_rails` / `scripts/create_honker_rails_app.rb` scaffold a
+  minimal Rails 8.1 app with backend+wakeup+L1+cable+lifecycle and a smoke runner.
+
 
 ## [1.0.0] - 2026-07-17
 

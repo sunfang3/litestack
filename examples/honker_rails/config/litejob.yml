@@ -1,0 +1,52 @@
+# Honker-on LiteJob for the example app.
+# Requires gem "honker" and a file-backed path (not :memory:).
+# Docs: docs/HONKER.md
+
+development:
+  path: storage/development/queue.sqlite3
+  workers: 2
+  queues:
+    - [default, 1]
+  wakeup: honker
+  watcher_poll_interval_ms: 5
+  fallback_interval: 5
+  queue_notify: true
+  wakeup_filter_notifications: true
+  backend: honker
+  visibility_timeout: 60
+  heartbeat_interval: 15
+  leadership: true
+  job_results: true
+  result_ttl: 3600
+  lifecycle_stream: true
+
+test:
+  path: storage/test/queue.sqlite3
+  workers: 0
+  queues:
+    - [default, 1]
+  # Keep test lightweight; smoke script opts into honker explicitly when needed.
+  wakeup: polling
+
+production:
+  path: storage/production/queue.sqlite3
+  workers: 5
+  queues:
+    - [default, 1]
+    - [urgent, 10]
+  wakeup: honker
+  watcher_poll_interval_ms: 5
+  fallback_interval: 5
+  queue_notify: true
+  wakeup_filter_notifications: true
+  backend: honker
+  visibility_timeout: 300
+  heartbeat_interval: 60
+  leadership: true
+  job_results: true
+  result_ttl: 3600
+  lifecycle_stream: true
+  # Optional: co-locate queue on Rails primary SQLite (transactional outbox)
+  # database: primary
+  # outbox: true
+  # table_prefix: litestack_

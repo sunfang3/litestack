@@ -41,7 +41,8 @@ namespace :test do
       "test/test_litejob_results_lifecycle.rb",
       "test/test_liteboard_lifecycle.rb",
       "test/test_sql_table_prefix.rb",
-      "test/test_honker_status.rb"
+      "test/test_honker_status.rb",
+      "test/test_honker_rails_example.rb"
     ]
     t.warning = false
   end
@@ -62,6 +63,18 @@ namespace :litestack do
       code = Litestack::HonkerStatus.run_cli!
       exit code
     end
+  end
+end
+
+namespace :examples do
+  desc "Scaffold a minimal Rails app with Honker fully enabled (DEST=tmp/honker_rails)"
+  task :honker_rails do
+    dest = ENV.fetch("DEST", "tmp/honker_rails")
+    args = [dest]
+    args << "--force" if ENV["FORCE"] == "1"
+    args << "--skip-smoke" if ENV["SKIP_SMOKE"] == "1"
+    args << "--rails-version" << ENV["RAILS_VERSION"] if ENV["RAILS_VERSION"]
+    sh "bundle", "exec", "ruby", "scripts/create_honker_rails_app.rb", *args
   end
 end
 

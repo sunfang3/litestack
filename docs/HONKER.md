@@ -137,6 +137,22 @@ LITEBOARD_QUEUE_PATH=storage/production/queue.sqlite3 bin/liteboard
 
 ---
 
+## Example Rails app (one command)
+
+Scaffold a **minimal Rails 8.1** app with Honker fully on (job backend + wakeup,
+L1 invalidate, cable transport, lifecycle stream):
+
+```bash
+export BUNDLE_RUBYGEMS__PKG__GITHUB__COM="YOUR_GH_USERNAME:YOUR_PAT"  # read:packages
+bundle exec rake examples:honker_rails
+# or: DEST=/tmp/my_app FORCE=1 bundle exec rake examples:honker_rails
+```
+
+Overlays and smoke script: [`examples/honker_rails/`](../examples/honker_rails/).
+Full walkthrough: [`examples/honker_rails/README.md`](../examples/honker_rails/README.md).
+
+---
+
 ## Status probe (is Honker active?)
 
 ```bash
