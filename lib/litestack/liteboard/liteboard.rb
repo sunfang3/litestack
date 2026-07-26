@@ -112,8 +112,8 @@ class Liteboard
   rescue NotFoundError => e
     error_response(404, "Not found", e.message)
   rescue => e
-    @logger&.error { e.full_message } if defined?(@logger)
-    error_response(500, "Render error", "Failed to render #{method}. Check metrics database connectivity.")
+    warn "[liteboard] #{method}: #{e.class}: #{e.message}\n#{e.backtrace&.first(8)&.join("\n")}"
+    error_response(500, "Render error", "Failed to render #{method}: #{e.class}: #{e.message}")
   end
 
   def after(body = nil)
@@ -160,13 +160,16 @@ class Liteboard
   def index
     @order ||= "topic"
     @empty_state = @topics.nil? || @topics.empty?
-    @topics.each do |topic|
+    # sqlite3 returns frozen row Arrays (Ruby 3.4+/sqlite3 2.x); never mutate them.
+    @topics = Array(@topics).map do |topic|
+      row = topic.is_a?(Array) ? topic.dup : Array(topic)
       data_points = begin
-        @lm.topic_data_points(@step, @count, @resolution, topic[0])
+        @lm.topic_data_points(@step, @count, @resolution, row[0])
       rescue
         []
       end
-      topic << data_points.collect { |r| [r[0], r[2] || 0] }
+      series = data_points.collect { |r| [r[0], r[2] || 0] }
+      row + [series]
     end
     render :index
   end
@@ -458,8 +461,10 @@ class Liteboard
     if snapshot.nil? || snapshot.empty?
       []
     else
-      snapshot[0] = Oj.load(snapshot[0]) if snapshot[0].is_a?(String)
-      snapshot
+      # Row arrays from sqlite3 may be frozen — copy before decode/mutate.
+      row = snapshot.is_a?(Array) ? snapshot.dup : Array(snapshot)
+      row[0] = Oj.load(row[0]) if row[0].is_a?(String)
+      row
     end
   rescue
     []

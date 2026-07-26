@@ -53,6 +53,21 @@ class TestLiteboard < Minitest::Test
     assert_match(/role="banner"|<header/, html)
   end
 
+  # Regression: sqlite3 2.x freezes row Arrays; index must not topic << series.
+  def test_index_with_summarized_topics_does_not_frozen_error
+    slot = (Time.now.to_i / 300) * 300
+    5.times { @lm.capture("Litecache", "get", "k1", 0.001) }
+    @lm.instance_variable_get(:@collector).flush
+    # Force a summary row so index enriches with series
+    @lm.run_stmt(:register_topic, "Litecache") rescue nil
+
+    status, _headers, body = Liteboard.app.call(rack_env("/", "res=day"))
+    html = body.join
+    assert_equal 200, status, "expected 200, got #{status}: #{html[0, 400]}"
+    refute_match(/Render error|FrozenError/i, html)
+    assert_match(/Litecache|Topics|No metrics/i, html)
+  end
+
   def test_empty_metrics_state
     status, _headers, body = Liteboard.app.call(rack_env("/"))
     html = body.join
