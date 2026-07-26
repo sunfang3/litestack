@@ -134,6 +134,118 @@ input, select {
   margin: 0.5rem 0 1rem;
 }
 
+/* Legacy Google-Charts hooks — data was hidden; JS now renders SVG */
+.hidden {
+  display: none !important;
+}
+.lb-chart-host.hidden,
+.lb-chart-host {
+  display: block !important;
+  min-height: 4rem;
+  margin: 0.35rem 0 0.5rem;
+}
+.lb-chart-wrap {
+  width: 100%;
+  max-width: 100%;
+}
+.lb-chart-svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  background: #f8fbfc;
+  border: 1px solid #e0e8ea;
+  border-radius: 0.35rem;
+}
+.lb-chart-grid {
+  stroke: #d0dce0;
+  stroke-width: 1;
+}
+.lb-chart-axis,
+.lb-chart-bar-label {
+  fill: #555;
+  font-size: 10px;
+  font-family: system-ui, sans-serif;
+}
+.lb-chart-bar-label {
+  font-size: 11px;
+}
+.lb-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--lb-muted);
+}
+.lb-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.lb-chart-swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  display: inline-block;
+}
+.lb-chart-empty {
+  margin: 0.5rem 0;
+  font-style: italic;
+}
+.lb-sparkline {
+  margin-bottom: 0.35rem;
+}
+.lb-sparkline .lb-chart-svg {
+  height: 72px;
+}
+
+/* Card layout used by component pages */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.col, .col-6 {
+  flex: 1 1 14rem;
+  min-width: 12rem;
+}
+.col-6 { flex-basis: 45%; }
+.card {
+  border: 1px solid #d5e0e3;
+  border-radius: 0.4rem;
+  background: #fff;
+  height: 100%;
+  overflow: hidden;
+}
+.card-header {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e8eef0;
+  font-weight: 600;
+  color: var(--lb-accent);
+  font-size: 0.95rem;
+}
+.card-body {
+  padding: 0.65rem 0.75rem 0.85rem;
+}
+.card-body h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+.card-body h6 { margin: 0; }
+.card-body .table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.card-body .table td {
+  border-bottom: 1px solid #eee;
+  padding: 0.3rem 0.25rem;
+  vertical-align: top;
+  word-break: break-all;
+}
+
 .noscript-note {
   padding: 0.5rem 0.75rem;
   background: #fff8e1;

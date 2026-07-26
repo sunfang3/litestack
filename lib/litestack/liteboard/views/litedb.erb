@@ -72,7 +72,7 @@
           Reads vs writes over time
         </div>
         <div class="card-body">
-          <span class="hidden inlinecolumn"><%=Oj.dump([["Time", "Reads", "Writes"]] + @reads_vs_writes)%></span>
+          <div class="inlinecolumn" data-label="Reads vs writes over time" data-chart-json="<%= h(json_data([["Time", "Reads", "Writes"]] + Array(@reads_vs_writes))) %>"></div>
         </div>
       </div>
     </div>
@@ -83,7 +83,7 @@
           Reads vs writes
         </div>
         <div class="card-body">
-          <span class="hidden inlinepie"><%=[["name", "value"],["reads", @reads],["writes", @writes]]%></span>
+          <div class="inlinepie" data-label="Reads vs writes" data-chart-json="<%= h(json_data([["name", "value"], ["reads", @reads.to_i], ["writes", @writes.to_i]])) %>"></div>
         </div>
       </div>
     </div>
@@ -102,7 +102,7 @@
           Query execution time over time
         </div>
         <div class="card-body">
-          <span class="hidden inlinecolumn"><%=Oj.dump([["Time", "Reads execution time",  {'role' => 'tooltip'}, "Writes execution time", {'role' => 'tooltip'}]] + @reads_vs_writes_times)%></span>
+          <div class="inlinecolumn" data-label="Query execution time" data-chart-json="<%= h(json_data([["Time", "Reads execution time", "Writes execution time"]] + Array(@reads_vs_writes_times).map { |r| Array(r).first(3) })) %>"></div>
         </div>
       </div>
     </div>
@@ -113,7 +113,7 @@
           Query time
         </div>
         <div class="card-body">
-          <span class="hidden inlinepie"><%=[["name", "value"],["total reads time", @read_times],["total writes time", @write_times]]%></span>
+          <div class="inlinepie" data-label="Query time" data-chart-json="<%= h(json_data([["name", "value"], ["total reads time", @read_times.to_f], ["total writes time", @write_times.to_f]])) %>"></div>
         </div>
       </div>
     </div>

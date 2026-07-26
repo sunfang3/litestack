@@ -47,7 +47,7 @@
         <div class="card-body">
           <h1><%=format(@reads)%> / <%=format(@writes)%> <span class="fs-4"><%=round(@reads.to_f/@writes) rescue 0%> reads/write</span></h1>
           <hr/>
-          <span class="hidden inlinepie"><%=[["name", "value"],["reads", @reads],["writes", @writes]]%></span>
+          <div class="inlinepie" data-label="Reads / Writes" data-chart-json="<%= h(json_data([["name", "value"], ["reads", @reads.to_i], ["writes", @writes.to_i]])) %>"></div>
         </div>
       </div>
     </div>
@@ -60,7 +60,7 @@
         <div class="card-body">
           <h1><%=format(@hits)%> / <%=format(@misses)%> <span class="fs-4"><%=round(@hitrate*100)%>% hit rate</span></h1>
           <hr/>
-          <span class="hidden inlinepie"><%=[["name", "value"],["hits", @hits],["misses", @misses]]%></span>
+          <div class="inlinepie" data-label="Hits / Misses" data-chart-json="<%= h(json_data([["name", "value"], ["hits", @hits.to_f], ["misses", @misses.to_f]])) %>"></div>
         </div>
       </div>
     </div>
@@ -79,9 +79,7 @@
           Reads, writes over time
         </div>
         <div class="card-body">
-          <div class="hidden inlinecolumn">
-            <%=Oj.dump([["Time", "Reads", "Writes"]] + @reads_vs_writes)%>
-          </div>
+          <div class="inlinecolumn" data-label="Reads, writes over time" data-chart-json="<%= h(json_data([["Time", "Reads", "Writes"]] + Array(@reads_vs_writes))) %>"></div>
         </div>
       </div>
     </div>
@@ -92,9 +90,7 @@
           Hits vs misses over time
         </div>
         <div class="card-body">
-          <span class="hidden inlinecolumn">
-            <%=Oj.dump([["Time", "Hits", "Misses"]] + @hits_vs_misses)%>
-          </span>
+          <div class="inlinecolumn" data-label="Hits vs misses over time" data-chart-json="<%= h(json_data([["Time", "Hits", "Misses"]] + Array(@hits_vs_misses))) %>"></div>
         </div>
       </div>
     </div>

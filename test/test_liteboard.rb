@@ -111,6 +111,27 @@ class TestLiteboard < Minitest::Test
     js = body.join
     refute_match(/\beval\s*\(/, js)
     assert_match(/JSON\.parse/, js)
+    assert_match(/createElementNS/, js, "local SVG charts expected")
+    assert_match(/lb-chart/, js)
+  end
+
+  def test_asset_css_has_chart_styles
+    status, _headers, body = Liteboard.app.call(rack_env("/assets/liteboard.css"))
+    assert_equal 200, status
+    css = body.join
+    assert_match(/lb-chart-svg/, css)
+    assert_match(/lb-chart-legend/, css)
+  end
+
+  def test_litedb_page_embeds_chart_json
+    slot = (Time.now.to_i / 300) * 300
+    3.times { @lm.capture("Litedb", "Read", "SELECT 1", 0.002) }
+    @lm.instance_variable_get(:@collector).flush
+    status, _headers, body = Liteboard.app.call(rack_env("/topics/Litedb", "res=day"))
+    html = body.join
+    assert_equal 200, status, html[0, 300]
+    assert_match(/inlinecolumn|data-chart-json|Litedb/i, html)
+    refute_match(/Render error/i, html)
   end
 
   def test_component_litecache_empty
