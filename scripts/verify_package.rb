@@ -14,7 +14,7 @@ Dir.chdir(root)
 require_relative "../lib/litestack/version"
 
 version = Litestack::VERSION
-abort "Expected version 1.1.1, got #{version}" unless version == "1.1.1"
+abort "Expected version 1.1.2, got #{version}" unless version == "1.1.2"
 
 puts "== building gem =="
 system({"BUNDLE_GEMFILE" => File.join(root, "Gemfile")}, "gem", "build", "litestack.gemspec", exception: true)

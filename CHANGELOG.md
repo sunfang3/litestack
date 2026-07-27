@@ -1,5 +1,23 @@
 ## [Unreleased]
 
+## [1.1.2] - 2026-07-27
+
+Published to **GitHub Packages** (`rubygems.pkg.github.com/sunfang3`).
+
+### Added
+
+- **Liteboard local SVG charts**: line charts for time series (`inlinecolumn`)
+  and horizontal bar breakdowns (`inlinepie`) without CDN/Google Charts; index
+  activity sparklines. Self-hosted under `/assets/liteboard.{js,css}` (CSP-safe).
+
+### Fixed
+
+- **Liteboard home page FrozenError**: sqlite3 2.x freezes result row Arrays;
+  index no longer mutates topic rows with `<<` (generic "Render error" on home).
+- **Liteboard snapshot decode**: copy frozen rows before `Oj.load` mutation.
+- **Liteboard error surfacing**: render failures log class/message instead of a
+  opaque connectivity-only message.
+
 ## [1.1.1] - 2026-07-22
 
 Published to **GitHub Packages** (`rubygems.pkg.github.com/sunfang3`).

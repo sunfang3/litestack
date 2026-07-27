@@ -7,10 +7,10 @@ RubyGems.org.
 |------|--------|
 | Host | `https://rubygems.pkg.github.com/sunfang3` |
 | Package name | `litestack` |
-| Current version | **1.1.1** |
+| Current version | **1.1.2** |
 | Package page | https://github.com/users/sunfang3/packages/rubygems/package/litestack |
 | Repo | https://github.com/sunfang3/litestack |
-| Tag | `v1.1.1` |
+| Tag | `v1.1.2` |
 
 Related: [HONKER.md](HONKER.md) (optional peer) · [HONKER_FULL_STACK_BENCH.md](HONKER_FULL_STACK_BENCH.md).
 
