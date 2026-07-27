@@ -24,7 +24,7 @@ Related: [HONKER.md](HONKER.md) (optional peer) · [HONKER_FULL_STACK_BENCH.md](
 source "https://rubygems.org"
 
 source "https://rubygems.pkg.github.com/sunfang3" do
-  gem "litestack", "1.1.1"
+  gem "litestack", "1.1.2"
   gem "honker", "0.4.0"   # optional — multi-worker wake / L1 / claim / lifecycle
 end
 ```
@@ -176,6 +176,11 @@ git push origin master --tags
 ---
 
 ## 5. Recent release notes
+
+### 1.1.2 (tag `v1.1.2`)
+
+- Liteboard local SVG charts (line/bar, no CDN)
+- Liteboard home FrozenError fix (sqlite3 frozen rows)
 
 ### 1.1.1 (tag `v1.1.1`)
 

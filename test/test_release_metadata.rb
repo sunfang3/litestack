@@ -5,7 +5,7 @@ require "rubygems"
 
 class TestReleaseMetadata < Minitest::Test
   def test_version_is_1_1_1
-    assert_equal "1.1.1", Litestack::VERSION
+    assert_equal "1.1.2", Litestack::VERSION
   end
 
   def test_gemspec_ruby_and_no_rails_runtime
